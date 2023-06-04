@@ -4,12 +4,12 @@
 
 #### 构建
 
-执行构建脚本 `build.sh` 即可
+执行构建脚本 `Makefile` 即可
 
 ```bash
 # ${store_pg_plugin_version}: store-postgresql 插件版本，默认为 main 的最新 commit
 # ${polaris_server_tag}: 北极星服务端版本信息，默认为 main 分支
-make build STORE_PG_PLUGIN_VERSION=${store_pg_plugin_version} POLARIS_SERVER_VERSION=${polaris_server_tag}
+make build STORE_PG_PLUGIN_VERSION=latest POLARIS_SERVER_VERSION=${polaris_server_tag}
 ```
 
 #### 配置文件调整
@@ -34,8 +34,3 @@ store:
       connMaxLifetime: 300 # Unit second
       txIsolationLevel: 2 #LevelReadCommitted
 ```
-
-
-## 其他
-
-- NACOS 中的 struct 数据结构定义大部份引用自 [nacos-sdk-go](https://github.com/nacos-group/nacos-sdk-go)

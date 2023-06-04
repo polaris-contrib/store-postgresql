@@ -41,10 +41,11 @@ fi
 cat ../plugin_store_pg.go.temp >plugin_store_pg.go
 
 go clean --modcache
-go get -ugithub.com/polaris-contrib/polaris-store-postgresql@${store_pg_plugin_version}
+go get -u github.com/polaris-contrib/polaris-store-postgresql@${store_pg_plugin_version}
 go mod tidy
 
 make build VERSION=${polaris_server_tag}
 
 release_file=$(ls -lstrh | grep ".zip" | awk '{print $10}' | grep -v "md5")
 cp ${release_file} ${workdir}
+
