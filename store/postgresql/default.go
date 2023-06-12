@@ -19,8 +19,8 @@ const (
 	emptyEnableTime = "STR_TO_DATE('1980-01-01 00:00:01', '%Y-%m-%d %H:%i:%s')"
 )
 
-// postgresqlStore 实现了Store接口
-type postgresqlStore struct {
+// PostgresqlStore 实现了Store接口
+type PostgresqlStore struct {
 	*namespaceStore
 	// client info stores
 	*clientStore
@@ -66,12 +66,12 @@ type postgresqlStore struct {
 }
 
 // Name 实现Name函数
-func (p *postgresqlStore) Name() string {
+func (p *PostgresqlStore) Name() string {
 	return STORENAME
 }
 
 // Initialize 初始化函数
-func (p *postgresqlStore) Initialize(conf *store.Config) error {
+func (p *PostgresqlStore) Initialize(conf *store.Config) error {
 	if p.start {
 		return nil
 	}
@@ -115,7 +115,7 @@ func (p *postgresqlStore) Initialize(conf *store.Config) error {
 }
 
 // Destroy 退出函数
-func (p *postgresqlStore) Destroy() error {
+func (p *PostgresqlStore) Destroy() error {
 	p.start = false
 
 	if p.master != nil {
@@ -140,7 +140,7 @@ func (p *postgresqlStore) Destroy() error {
 }
 
 // CreateTransaction 创建一个事务
-func (p *postgresqlStore) CreateTransaction() (store.Transaction, error) {
+func (p *PostgresqlStore) CreateTransaction() (store.Transaction, error) {
 	// 每次创建事务前，还是需要ping一下
 	_ = p.masterTx.Ping()
 
@@ -156,7 +156,7 @@ func (p *postgresqlStore) CreateTransaction() (store.Transaction, error) {
 	return nt, nil
 }
 
-func (p *postgresqlStore) StartTx() (store.Tx, error) {
+func (p *PostgresqlStore) StartTx() (store.Tx, error) {
 	tx, err := p.masterTx.Begin()
 	if err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func parseStoreConfig(opts interface{}) (*dbConfig, error) {
 }
 
 // newStore 初始化子类
-func (p *postgresqlStore) newStore() {
+func (p *PostgresqlStore) newStore() {
 	p.namespaceStore = &namespaceStore{master: p.master, slave: p.slave}
 
 	p.serviceStore = &serviceStore{master: p.master, slave: p.slave}
@@ -280,7 +280,7 @@ func (p *postgresqlStore) newStore() {
 }
 
 func init() {
-	s := &postgresqlStore{}
+	s := &PostgresqlStore{}
 	err := store.RegisterStore(s)
 	if err != nil {
 		log.Errorf("[Store][database] RegisterStore err: %+v", err)
