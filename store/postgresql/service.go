@@ -1,32 +1,14 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
+	"strings"
+	"time"
 )
 
 // serviceStore 实现了ServiceStore
@@ -130,8 +112,11 @@ func (ss *serviceStore) deleteService(id, serviceName, namespaceName string) err
 // deleteServiceByID 删除服务或服务别名
 func deleteServiceByID(tx *BaseTx, id string) error {
 	log.Infof("[Store][database] delete service id(%s)", id)
-	str := "update service set flag = 1, mtime = sysdate() where id = ?"
-	if _, err := tx.Exec(str, id); err != nil {
+	stmt, err := tx.Prepare("update service set flag = 1, mtime = $1 where id = $2")
+	if err != nil {
+		return err
+	}
+	if _, err := stmt.Exec(GetCurrentTimeFormat(), id); err != nil {
 		return err
 	}
 
@@ -141,8 +126,11 @@ func deleteServiceByID(tx *BaseTx, id string) error {
 // DeleteServiceAlias 删除服务别名
 func (ss *serviceStore) DeleteServiceAlias(name string, namespace string) error {
 	return ss.master.processWithTransaction("deleteServiceAlias", func(tx *BaseTx) error {
-		str := "update service set flag = 1, mtime = sysdate() where name = ? and namespace = ?"
-		if _, err := tx.Exec(str, name, namespace); err != nil {
+		stmt, err := tx.Prepare("update service set flag = 1, mtime = $1 where name = $2 and namespace = $3")
+		if err != nil {
+			return store.Error(err)
+		}
+		if _, err = stmt.Exec(GetCurrentTimeFormat(), name, namespace); err != nil {
 			log.Errorf("[Store][database] delete service alias err: %s", err.Error())
 			return store.Error(err)
 		}
@@ -188,12 +176,15 @@ func (ss *serviceStore) updateServiceAlias(alias *model.Service, needUpdateOwner
 		update 
 			service 
 		set 
-			name = ?, namespace = ?, reference = ?, comment = ?, token = ?, revision = ?, owner = ?, mtime = sysdate()
+			name = $1, namespace = $2, reference = $3, comment = $4, token = $5, revision = $6, owner = $7, mtime = $8
 		where 
-			id = ? and (select flag from (select flag from service where id = ?) as alias) = 0`
-
-	result, err := tx.Exec(updateStmt, alias.Name, alias.Namespace, alias.Reference, alias.Comment, alias.Token,
-		alias.Revision, alias.Owner, alias.ID, alias.Reference)
+			id = $9 and (select flag from (select flag from service where id = $10) as alias) = 0`
+	stmt, err := tx.Prepare(updateStmt)
+	if err != nil {
+		return err
+	}
+	result, err := stmt.Exec(alias.Name, alias.Namespace, alias.Reference, alias.Comment, alias.Token,
+		alias.Revision, alias.Owner, GetCurrentTimeFormat(), alias.ID, alias.Reference)
 	if err != nil {
 		log.Errorf("[Store][ServiceAlias] update service alias exec err: %s", err.Error())
 		return err
@@ -293,14 +284,18 @@ func (ss *serviceStore) updateService(service *model.Service, needUpdateOwner bo
 		log.Errorf("[Store][database] update service tx commit err: %s", err.Error())
 		return err
 	}
+
 	return nil
 }
 
 // UpdateServiceToken 更新服务token
 func (ss *serviceStore) UpdateServiceToken(id string, token string, revision string) error {
 	return ss.master.processWithTransaction("updateServiceToken", func(tx *BaseTx) error {
-		str := `update service set token = ?, revision = ?, mtime = sysdate() where id = ?`
-		_, err := tx.Exec(str, token, revision, id)
+		stmt, err := tx.Prepare("update service set token = $1, revision = $2, mtime = $3 where id = $4")
+		if err != nil {
+			return store.Error(err)
+		}
+		_, err = stmt.Exec(token, revision, GetCurrentTimeFormat(), id)
 		if err != nil {
 			log.Errorf("[Store][database] update service(%s) token err: %s", id, err.Error())
 			return store.Error(err)
@@ -332,8 +327,8 @@ func (ss *serviceStore) GetService(name string, namespace string) (*model.Servic
 // GetSourceServiceToken 获取只获取服务token
 // 返回服务ID，服务token
 func (ss *serviceStore) GetSourceServiceToken(name string, namespace string) (*model.Service, error) {
-	str := `select id, token, IFNULL(platform_id, "") from service
-			where name = ? and namespace = ? and flag = 0 
+	str := `select id, token, platform_id from service
+			where name = $1 and namespace = $2 and flag = 0 
 			and (reference is null or reference = '')`
 	var out model.Service
 	err := ss.master.QueryRow(str, name, namespace).Scan(&out.ID, &out.Token, &out.PlatformID)
@@ -377,6 +372,7 @@ func (ss *serviceStore) GetServices(serviceFilters, serviceMetas map[string]stri
 	if err != nil {
 		return 0, nil, err
 	}
+
 	return num, out, err
 }
 
@@ -397,6 +393,7 @@ func (ss *serviceStore) GetMoreServices(mtime time.Time, firstUpdate, disableBus
 		}
 		return services, nil
 	}
+
 	services, err := getMoreServiceMain(ss.slave.Query, mtime, firstUpdate, disableBusiness)
 	if err != nil {
 		log.Errorf("[Store][database] get more service main err: %s", err.Error())
@@ -408,7 +405,7 @@ func (ss *serviceStore) GetMoreServices(mtime time.Time, firstUpdate, disableBus
 // GetSystemServices 获取系统服务
 func (ss *serviceStore) GetSystemServices() ([]*model.Service, error) {
 	str := genServiceSelectSQL()
-	str += " from service where flag = 0 and namespace = ?"
+	str += " from service where flag = 0 and namespace = $1"
 	rows, err := ss.master.Query(str, SystemNamespace)
 	if err != nil {
 		log.Errorf("[Store][database] get system service query err: %s", err.Error())
@@ -454,14 +451,15 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 
 	baseStr := `
 		select 
-			alias.id, alias.name, alias.namespace, UNIX_TIMESTAMP(alias.ctime), UNIX_TIMESTAMP(alias.mtime), 
+			alias.id, alias.name, alias.namespace, alias.ctime, alias.mtime, 
 			alias.comment, source.id as sourceID, source.name as sourceName, source.namespace, alias.owner 
 		from 
 			service as alias inner join service as source 
 			on alias.reference = source.id and alias.flag != 1 `
 	order := &Order{"alias.mtime", "desc"}
+	indexSort := 1
 
-	queryStmt, args := genServiceAliasWhereSQLAndArgs(baseStr, filter, order, offset, limit)
+	queryStmt, args := genServiceAliasWhereSQLAndArgs(baseStr, filter, order, offset, limit, indexSort)
 	rows, err := ss.master.Query(queryStmt, args...)
 	if err != nil {
 		log.Errorf("[Store][database] get service aliases query(%s) err: %s", queryStmt, err.Error())
@@ -470,7 +468,7 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 	defer func() { _ = rows.Close() }()
 
 	var out []*model.ServiceAlias
-	var ctime, mtime int64
+	var ctime, mtime time.Time
 	for rows.Next() {
 		var entry model.ServiceAlias
 		err := rows.Scan(
@@ -481,8 +479,8 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 			return nil, err
 		}
 
-		entry.CreateTime = time.Unix(ctime, 0)
-		entry.ModifyTime = time.Unix(mtime, 0)
+		entry.CreateTime = ctime
+		entry.ModifyTime = mtime
 		out = append(out, &entry)
 	}
 
@@ -497,7 +495,7 @@ func (ss *serviceStore) getServiceAliasesCount(filter map[string]string) (uint32
 		from 
 			service as alias inner join service as source 
 			on alias.reference = source.id and alias.flag != 1 `
-	str, args := genServiceAliasWhereSQLAndArgs(baseStr, filter, nil, 0, 1)
+	str, args := genServiceAliasWhereSQLAndArgs(baseStr, filter, nil, 0, 1, 1)
 	return queryEntryCount(ss.master, str, args)
 }
 
@@ -511,20 +509,25 @@ func (ss *serviceStore) getServices(sFilters, sMetas map[string]string, iFilters
 
 	// 构造SQL语句
 	var args []interface{}
+	var indexSort = 0
 	whereStr := " from service where (reference is null or reference = '') "
 	if len(sMetas) > 0 {
-		subStr, subArgs := filterMetadata(sMetas)
+		subStr, subArgs, indexSort1 := filterMetadata(sMetas, indexSort)
+		indexSort = indexSort1
 		whereStr += " and service.id in " + subStr
 		args = append(args, subArgs...)
 	}
+
 	if iFilters != nil {
-		subStr, subArgs := filterInstance(iFilters)
+		subStr, subArgs, indexSort2 := filterInstance(iFilters, indexSort)
+		indexSort = indexSort2
 		whereStr += " and service.id in " + subStr
 		args = append(args, subArgs...)
 	}
 	str := genServiceSelectSQL() + whereStr
 
-	filterStr, filterArgs := genServiceFilterSQL(sFilters)
+	filterStr, filterArgs, indexSort3 := genServiceFilterSQL(sFilters, indexSort)
+	indexSort = indexSort3
 	if filterStr != "" {
 		str += " and " + filterStr
 		args = append(args, filterArgs...)
@@ -532,10 +535,12 @@ func (ss *serviceStore) getServices(sFilters, sMetas map[string]string, iFilters
 
 	order := &Order{"service.mtime", "desc"}
 	page := &Page{offset, limit}
-	opStr, opArgs := genOrderAndPage(order, page)
+	opStr, opArgs, indexSort4 := genOrderAndPage(order, page, indexSort)
+	indexSort = indexSort4
 
 	str += opStr
 	args = append(args, opArgs...)
+
 	rows, err := ss.master.Query(str, args...)
 	if err != nil {
 		log.Errorf("[Store][database] get services by filter query(%s) err: %s", str, err.Error())
@@ -556,22 +561,27 @@ func (ss *serviceStore) getServicesCount(
 	sFilters, sMetas map[string]string, iFilters *store.InstanceArgs) (uint32, error) {
 	str := `select count(*) from service  where (reference is null or reference = '')`
 	var args []interface{}
+	var indexSort = 0
 	if len(sMetas) > 0 {
-		subStr, subArgs := filterMetadata(sMetas)
+		subStr, subArgs, indexSort1 := filterMetadata(sMetas, indexSort)
+		indexSort = indexSort1
 		str += " and service.id in " + subStr
 		args = append(args, subArgs...)
 	}
 	if iFilters != nil {
-		subStr, subArgs := filterInstance(iFilters)
+		subStr, subArgs, indexSort2 := filterInstance(iFilters, indexSort)
+		indexSort = indexSort2
 		str += " and service.id in " + subStr
 		args = append(args, subArgs...)
 	}
 
-	filterStr, filterArgs := genServiceFilterSQL(sFilters)
+	filterStr, filterArgs, indexSort3 := genServiceFilterSQL(sFilters, indexSort)
+	indexSort = indexSort3
 	if filterStr != "" {
 		str += " and " + filterStr
 		args = append(args, filterArgs...)
 	}
+
 	return queryEntryCount(ss.master, str, args)
 }
 
@@ -631,7 +641,7 @@ func (ss *serviceStore) getServiceMeta(id string) (map[string]string, error) {
 	}
 
 	// 从metadata表中获取数据
-	metaStr := "select `mkey`, `mvalue` from service_metadata where id = ?"
+	metaStr := "select mkey, mvalue from service_metadata where id = $1"
 	rows, err := ss.master.Query(metaStr, id)
 	if err != nil {
 		log.Errorf("[Store][database] get service metadata query err: %s", err.Error())
@@ -665,7 +675,7 @@ func (ss *serviceStore) getService(name string, namespace string) (*model.Servic
 
 // getServiceMain 获取服务表的信息，不包括metadata
 func (ss *serviceStore) getServiceMain(name string, namespace string) (*model.Service, error) {
-	str := genServiceSelectSQL() + " from service where name = ? and namespace = ?"
+	str := genServiceSelectSQL() + " from service where name = $1 and namespace = $2"
 	rows, err := ss.master.Query(str, name, namespace)
 	if err != nil {
 		log.Errorf("[Store][database] get service err: %s", err.Error())
@@ -686,7 +696,7 @@ func (ss *serviceStore) getServiceMain(name string, namespace string) (*model.Se
 
 // getServiceByID 根据服务ID获取服务详情的内部函数
 func (ss *serviceStore) getServiceByID(serviceID string) (*model.Service, error) {
-	str := genServiceSelectSQL() + " from service where service.id = ?"
+	str := genServiceSelectSQL() + " from service where service.id = $1"
 	rows, err := ss.master.Query(str, serviceID)
 	if err != nil {
 		log.Errorf("[Store][database] get service by id query err: %s", err.Error())
@@ -714,8 +724,11 @@ func (ss *serviceStore) getServiceByID(serviceID string) (*model.Service, error)
 // cleanService 清理无效数据，flag=1的数据，只需要删除service即可
 func cleanService(tx *BaseTx, name string, namespace string) error {
 	log.Infof("[Store][database] clean service(%s, %s)", name, namespace)
-	str := "delete from service where name = ? and namespace = ? and flag = 1"
-	_, err := tx.Exec(str, name, namespace)
+	stmt, err := tx.Prepare("delete from service where name = $1 and namespace = $2 and flag = 1")
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(name, namespace)
 	if err != nil {
 		log.Errorf("[Store][database] clean service(%s, %s) err: %s", name, namespace, err.Error())
 		return err
@@ -750,11 +763,11 @@ func getMoreServiceWithMeta(queryHandler QueryHandler, mtime time.Time, firstUpd
 
 	// 非首次拉取
 	var args []interface{}
-	args = append(args, timeToTimestamp(mtime))
-	str := genServiceSelectSQL() + `, IFNULL(service_metadata.id, ""), IFNULL(mkey, ""), IFNULL(mvalue, "") ` +
-		`from service left join service_metadata on service.id = service_metadata.id where service.mtime >= FROM_UNIXTIME(?)`
+	args = append(args, mtime)
+	str := genServiceSelectSQL() + `, service_metadata.id, mkey, mvalue ` +
+		`from service left join service_metadata on service.id = service_metadata.id where service.mtime >= $1`
 	if disableBusiness {
-		str += " and service.namespace = ?"
+		str += " and service.namespace = $2"
 		args = append(args, SystemNamespace)
 	}
 	rows, err := queryHandler(str, args...)
@@ -820,10 +833,10 @@ func fetchServiceWithMetaRows(rows *sql.Rows) (map[string]*model.Service, error)
 func getMoreServiceMain(queryHandler QueryHandler, mtime time.Time,
 	firstUpdate, disableBusiness bool) (map[string]*model.Service, error) {
 	var args []interface{}
-	args = append(args, timeToTimestamp(mtime))
-	str := genServiceSelectSQL() + " from service where service.mtime >= FROM_UNIXTIME(?)"
+	args = append(args, mtime)
+	str := genServiceSelectSQL() + " from service where service.mtime >= $1"
 	if disableBusiness {
-		str += " and service.namespace = ?"
+		str += " and service.namespace = $2"
 		args = append(args, SystemNamespace)
 	}
 	if firstUpdate {
@@ -853,16 +866,18 @@ func batchQueryServiceMeta(handler QueryHandler, services []interface{}) (*sql.R
 		return nil, nil
 	}
 
-	str := "select `id`, `mkey`, `mvalue` from service_metadata where id in("
+	str := "select id, mkey, mvalue from service_metadata where id in("
 	first := true
 	args := make([]interface{}, 0, len(services))
+	idx := 1
 	for _, ele := range services {
 		if first {
-			str += "?"
+			str += fmt.Sprintf("$%d", idx)
 			first = false
 		} else {
-			str += ",?"
+			str += fmt.Sprintf(",$%d", idx)
 		}
+		idx++
 		args = append(args, ele.(*model.Service).ID)
 	}
 	str += ")"
@@ -937,11 +952,16 @@ func addServiceMain(tx *BaseTx, s *model.Service) error {
 			(id, name, namespace, ports, business, department, cmdb_mod1, cmdb_mod2,
 			cmdb_mod3, comment, token, reference,  platform_id, revision, owner, ctime, mtime)
 		values
-			(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, sysdate(), sysdate())`
+			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
+	stmt, err := tx.Prepare(insertStmt)
+	if err != nil {
+		return err
+	}
 
-	_, err := tx.Exec(insertStmt, s.ID, s.Name, s.Namespace, s.Ports, s.Business, s.Department,
+	_, err = stmt.Exec(s.ID, s.Name, s.Namespace, s.Ports, s.Business, s.Department,
 		s.CmdbMod1, s.CmdbMod2, s.CmdbMod3, s.Comment, s.Token,
-		s.Reference, s.PlatformID, s.Revision, s.Owner)
+		s.Reference, s.PlatformID, s.Revision, s.Owner, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+
 	return err
 }
 
@@ -950,36 +970,43 @@ func addServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 	if len(meta) == 0 {
 		return nil
 	}
-	str := "insert into service_metadata(id, `mkey`, `mvalue`, `ctime`, `mtime`) values "
+	str := "insert into service_metadata(id, mkey, mvalue, ctime, mtime) values "
 	cnt := 0
+	index := 1
 	args := make([]interface{}, 0, len(meta)*3)
 	for key, value := range meta {
 		cnt++
 		if cnt == len(meta) {
-			str += "(?, ?, ?, sysdate(), sysdate())"
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		} else {
-			str += "(?, ?, ?, sysdate(), sysdate()),"
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'),", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		}
+		index += 3
 
 		args = append(args, id)
 		args = append(args, key)
 		args = append(args, value)
 	}
 
-	// log.Infof("str: %s, args: %+v", str, args)
+	log.Infof("str: %s, args: %+v", str, args)
 	_, err := tx.Exec(str, args...)
 	return err
 }
 
 // updateServiceMain 更新service主表
 func updateServiceMain(tx *BaseTx, service *model.Service) error {
-	str := `update service set name = ?, namespace = ?, ports = ?, business = ?,
-	department = ?, cmdb_mod1 = ?, cmdb_mod2 = ?, cmdb_mod3 = ?, comment = ?, token = ?, platform_id = ?,
-	revision = ?, owner = ?, mtime = sysdate() where id = ?`
+	str := `update service set name = $1, namespace = $2, ports = $3, business = $4,
+	department = $5, cmdb_mod1 = $6, cmdb_mod2 = $7, cmdb_mod3 = $8, comment = $9, 
+	token = $10, platform_id = $11, revision = $12, owner = $13, mtime = $14 where id = $15`
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
 
-	_, err := tx.Exec(str, service.Name, service.Namespace, service.Ports, service.Business,
+	_, err = stmt.Exec(service.Name, service.Namespace, service.Ports, service.Business,
 		service.Department, service.CmdbMod1, service.CmdbMod2, service.CmdbMod3,
-		service.Comment, service.Token, service.PlatformID, service.Revision, service.Owner, service.ID)
+		service.Comment, service.Token, service.PlatformID, service.Revision,
+		service.Owner, GetCurrentTimeFormat(), service.ID)
 	return err
 }
 
@@ -991,8 +1018,11 @@ func updateServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 		return nil
 	}
 
-	str := "delete from service_metadata where id = ?"
-	if _, err := tx.Exec(str, id); err != nil {
+	stmt, err := tx.Prepare("delete from service_metadata where id = $1")
+	if err != nil {
+		return err
+	}
+	if _, err := stmt.Exec(id); err != nil {
 		return err
 	}
 
@@ -1026,11 +1056,10 @@ func fetchServiceMeta(rows *sql.Rows) (map[string]string, error) {
 
 // genServiceSelectSQL 生成service查询语句
 func genServiceSelectSQL() string {
-	return `select service.id, name, namespace, IFNULL(business, ""), IFNULL(comment, ""),
-			token, service.revision, owner, service.flag, 
-			UNIX_TIMESTAMP(service.ctime), UNIX_TIMESTAMP(service.mtime),
-			IFNULL(ports, ""), IFNULL(department, ""), IFNULL(cmdb_mod1, ""), IFNULL(cmdb_mod2, ""), 
-			IFNULL(cmdb_mod3, ""), IFNULL(reference, ""), IFNULL(refer_filter, ""), IFNULL(platform_id, "") `
+	return `select service.id, name, namespace, business, comment,
+			token, service.revision, owner, service.flag, service.ctime, 
+			service.mtime, ports, department, cmdb_mod1, cmdb_mod2, 
+			cmdb_mod3, reference, COALESCE(refer_filter, '') refer_filter, platform_id `
 }
 
 // callFetchServiceRows call fetch service rows
@@ -1040,7 +1069,7 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 	}
 	defer rows.Close()
 
-	var ctime, mtime int64
+	var ctime, mtime time.Time
 	var flag int
 	progress := 0
 	for rows.Next() {
@@ -1052,8 +1081,8 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 		var item model.Service
 		err := rows.Scan(
 			&item.ID, &item.Name, &item.Namespace, &item.Business, &item.Comment,
-			&item.Token, &item.Revision, &item.Owner, &flag, &ctime, &mtime, &item.Ports,
-			&item.Department, &item.CmdbMod1, &item.CmdbMod2, &item.CmdbMod3,
+			&item.Token, &item.Revision, &item.Owner, &flag, &ctime, &mtime,
+			&item.Ports, &item.Department, &item.CmdbMod1, &item.CmdbMod2, &item.CmdbMod3,
 			&item.Reference, &item.ReferFilter, &item.PlatformID)
 
 		if err != nil {
@@ -1061,12 +1090,13 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 			return err
 		}
 
-		item.CreateTime = time.Unix(ctime, 0)
-		item.ModifyTime = time.Unix(mtime, 0)
+		item.CreateTime = ctime
+		item.ModifyTime = mtime
 		item.Valid = true
 		if flag == 1 {
 			item.Valid = false
 		}
+
 		ok, err := callback(&item)
 		if err != nil {
 			return err
@@ -1098,12 +1128,16 @@ func fetchServiceRows(rows *sql.Rows) ([]*model.Service, error) {
 
 // filterInstance 查找service，根据instance属性过滤
 // 生成子查询语句
-func filterInstance(filters *store.InstanceArgs) (string, []interface{}) {
+func filterInstance(filters *store.InstanceArgs, indexSort int) (string, []interface{}, int) {
 	var args []interface{}
+	filtersHosts, indexSort1 := PlaceholdersNI(len(filters.Hosts), indexSort)
+	indexSort = indexSort1
 	str := "(select service_id from instance where instance.flag != 1 and host in (" +
-		PlaceholdersN(len(filters.Hosts)) + ")"
+		filtersHosts + ")"
 	if len(filters.Ports) > 0 {
-		str += "and port in (" + PlaceholdersN(len(filters.Ports)) + ")"
+		filtersPorts, indexSort2 := PlaceholdersNI(len(filters.Ports), indexSort)
+		indexSort = indexSort2
+		str += " and port in (" + filtersPorts + ")"
 	}
 	str += " group by service_id)"
 	for _, host := range filters.Hosts {
@@ -1112,21 +1146,21 @@ func filterInstance(filters *store.InstanceArgs) (string, []interface{}) {
 	for _, port := range filters.Ports {
 		args = append(args, port)
 	}
-	return str, args
+	return str, args, indexSort
 }
 
 // filterMetadata 查找service，根据metadata属性过滤
 // 生成子查询语句
 // 多个metadata，取交集（and）
-func filterMetadata(metas map[string]string) (string, []interface{}) {
-	str := "(select id from service_metadata where mkey = ? and mvalue = ?)"
+func filterMetadata(metas map[string]string, indexSort int) (string, []interface{}, int) {
+	str := fmt.Sprintf("(select id from service_metadata where $%d = $%d and $%d = $%d)", indexSort+1, indexSort+2, indexSort+3, indexSort+4)
 	args := make([]interface{}, 0, 2)
 	for key, value := range metas {
 		args = append(args, key)
 		args = append(args, value)
 	}
 
-	return str, args
+	return str, args, indexSort + 5
 }
 
 // GetServicesBatch 查询多个服务的id
@@ -1136,8 +1170,11 @@ func (ss *serviceStore) GetServicesBatch(services []*model.Service) ([]*model.Se
 	}
 	str := `select id, name, namespace,owner from service where flag = 0 and (name, namespace) in (`
 	args := make([]interface{}, 0, len(services)*2)
+	idx := 1
 	for key, value := range services {
-		str += "(" + PlaceholdersN(2) + ")"
+		placeholder, idx1 := PlaceholdersNI(2, idx)
+		idx = idx1
+		str += "(" + placeholder + ")"
 		if key != len(services)-1 {
 			str += ","
 		}
@@ -1185,13 +1222,19 @@ func addOwnerServiceMap(tx *BaseTx, service, namespace, owner string) error {
 	args := make([]interface{}, 0)
 
 	if len(owners) >= 1 {
+		var index = 1
 		for i := 0; i < len(owners); i++ {
-			addSql += "(?,?,?,?),"
+			addSql += fmt.Sprintf("($%d,$%d,$%d,$%d),", index, index+1, index+2, index+3)
 			args = append(args, utils.NewUUID(), owners[i], service, namespace)
+			index += 3
 		}
 		if len(args) != 0 {
 			addSql = strings.TrimSuffix(addSql, ",")
-			if _, err := tx.Exec(addSql, args...); err != nil {
+			stmt, err := tx.Prepare(addSql)
+			if err != nil {
+				return err
+			}
+			if _, err := stmt.Exec(args...); err != nil {
 				return err
 			}
 		}
@@ -1202,11 +1245,13 @@ func addOwnerServiceMap(tx *BaseTx, service, namespace, owner string) error {
 // deleteOwnerServiceMap 删除owner_service_map表中对应记录
 func deleteOwnerServiceMap(tx *BaseTx, service, namespace string) error {
 	log.Infof("[Store][database] delete service(%s) namespace(%s)", service, namespace)
-	delSql := "delete from owner_service_map where service=? and namespace=?"
-	if _, err := tx.Exec(delSql, service, namespace); err != nil {
+	stmt, err := tx.Prepare("delete from owner_service_map where service=$1 and namespace=$2")
+	if err != nil {
 		return err
 	}
-
+	if _, err := stmt.Exec(service, namespace); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -1216,6 +1261,7 @@ func updateOwnerServiceMap(tx *BaseTx, service, namespace, owner string) error {
 	if err := deleteOwnerServiceMap(tx, service, namespace); err != nil {
 		return err
 	}
+
 	// 填充
 	if err := addOwnerServiceMap(tx, service, namespace, owner); err != nil {
 		return err

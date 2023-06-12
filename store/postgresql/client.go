@@ -1,33 +1,15 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
+	"strings"
+	"time"
 )
 
 type clientStore struct {
@@ -71,8 +53,12 @@ func deleteClient(tx *BaseTx, clientID string) error {
 		return errors.New("delete client missing client id")
 	}
 
-	str := "update client set flag = 1, mtime = sysdate() where `id` = ?"
-	_, err := tx.Exec(str, clientID)
+	str := "update client set flag = 1, mtime = $1 where id = $2"
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return store.Error(err)
+	}
+	_, err = stmt.Exec(GetCurrentTimeFormat(), clientID)
 	return store.Error(err)
 }
 
@@ -100,16 +86,16 @@ func (cs *clientStore) BatchDeleteClients(ids []string) error {
 
 // GetMoreClients 根据mtime获取增量clients，返回所有store的变更信息
 func (cs *clientStore) GetMoreClients(mtime time.Time, firstUpdate bool) (map[string]*model.Client, error) {
-	str := `select client.id, client.host, client.type, IFNULL(client.version,""), IFNULL(client.region, ""),
-		 IFNULL(client.zone, ""), IFNULL(client.campus, ""), client.flag,  IFNULL(client_stat.target, ""), 
-		 IFNULL(client_stat.port, 0), IFNULL(client_stat.protocol, ""), IFNULL(client_stat.path, ""), 
-		 UNIX_TIMESTAMP(client.ctime), UNIX_TIMESTAMP(client.mtime)
+	str := `select client.id, client.host, client.type, client.version, client.region,
+		 client.zone, client.campus, client.flag,  client_stat.target, 
+		 COALESCE(client_stat.port, 0), client_stat.protocol, client_stat.path, 
+		 client.ctime, client.mtime
 		 from client left join client_stat on client.id = client_stat.client_id `
-	str += " where client.mtime >= FROM_UNIXTIME(?)"
+	str += " where client.mtime >= $1"
 	if firstUpdate {
 		str += " and flag != 1"
 	}
-	rows, err := cs.slave.Query(str, timeToTimestamp(mtime))
+	rows, err := cs.slave.Query(str, mtime)
 	if err != nil {
 		log.Errorf("[Store][database] get more client query err: %s", err.Error())
 		return nil, err
@@ -145,11 +131,13 @@ func (cs *clientStore) batchAddClients(clients []*model.Client) error {
 	ids := make([]string, 0, len(clients))
 	var client2StatInfos = make(map[string][]*apiservice.StatInfo)
 	builder := strings.Builder{}
+	var idxSort = 1
 	for idx, entry := range clients {
 		if idx > 0 {
 			builder.WriteString(",")
 		}
-		builder.WriteString("?")
+		builder.WriteString(fmt.Sprintf("$%d", idxSort))
+		idxSort++
 		ids = append(ids, entry.Proto().GetId().GetValue())
 		var statInfos []*apiservice.StatInfo
 		if len(entry.Proto().GetStat()) > 0 {
@@ -209,8 +197,14 @@ func batchDeleteClientsMain(tx *BaseTx, ids []string) error {
 		if len(objects) == 0 {
 			return nil
 		}
-		str := `update client set flag = 1, mtime = sysdate() where id in ( ` + PlaceholdersN(len(objects)) + `)`
-		_, err := tx.Exec(str, objects...)
+		placeholder, _ := PlaceholdersNI(len(objects), 1)
+		str := fmt.Sprintf(`update client set flag = 1, mtime = %s`, GetCurrentTimeFormat())
+		str += ` where id in ( ` + placeholder + `)`
+		stmt, err := tx.Prepare(str)
+		if err != nil {
+			return store.Error(err)
+		}
+		_, err = stmt.Exec(objects...)
 		return store.Error(err)
 	})
 }
@@ -225,14 +219,19 @@ func batchCleanClientStats(tx *BaseTx, ids []string) error {
 		if len(objects) == 0 {
 			return nil
 		}
-		str := `delete from client_stat where client_id in (` + PlaceholdersN(len(objects)) + `)`
-		_, err := tx.Exec(str, objects...)
+		placeholder, _ := PlaceholdersNI(len(objects), 1)
+		str := `delete from client_stat where client_id in (` + placeholder + `)`
+		stmt, err := tx.Prepare(str)
+		if err != nil {
+			return store.Error(err)
+		}
+		_, err = stmt.Exec(objects...)
 		return store.Error(err)
 	})
 }
 
 func (cs *clientStore) GetClientStat(clientID string) ([]*model.ClientStatStore, error) {
-	str := "select `target`, `port`, `protocol`, `path` from client_stat where client.id = ?"
+	str := "select target, port, protocol, path from client_stat where client.id = $1"
 	rows, err := cs.master.Query(str, clientID)
 	if err != nil {
 		log.Errorf("[Store][database] query client stat err: %s", err.Error())
@@ -346,8 +345,12 @@ func (cs *clientStore) updateClient(client *model.Client) error {
 
 func addClientMain(tx *BaseTx, client *model.Client) error {
 	str := `insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime)
-			 values(?, ?, ?, ?, ?, ?, ?, 0, sysdate(), sysdate())`
-	_, err := tx.Exec(str,
+			 values($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)`
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(str,
 		client.Proto().GetId().GetValue(),
 		client.Proto().GetHost().GetValue(),
 		client.Proto().GetType().String(),
@@ -355,20 +358,26 @@ func addClientMain(tx *BaseTx, client *model.Client) error {
 		client.Proto().GetLocation().GetRegion().GetValue(),
 		client.Proto().GetLocation().GetZone().GetValue(),
 		client.Proto().GetLocation().GetCampus().GetValue(),
+		GetCurrentTimeFormat(),
+		GetCurrentTimeFormat(),
 	)
 	return err
 }
 
 func batchAddClientMain(tx *BaseTx, clients []*model.Client) error {
-	str := `replace into client(id, host, type, version, region, zone, campus, flag, ctime, mtime)
+	str := `insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime)
 		 values`
 	first := true
 	args := make([]interface{}, 0)
+	idx := 1
 	for _, client := range clients {
 		if !first {
 			str += ","
 		}
-		str += "(?, ?, ?, ?, ?, ?, ?, 0, sysdate(), sysdate())"
+		str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, 0, '%s', '%s')",
+			idx, idx+1, idx+2, idx+3, idx+4, idx+5, idx+6,
+			GetCurrentTimeFormat(), GetCurrentTimeFormat())
+		idx += 7
 		first = false
 
 		args = append(args, client.Proto().GetId().GetValue(),
@@ -379,7 +388,11 @@ func batchAddClientMain(tx *BaseTx, clients []*model.Client) error {
 			client.Proto().GetLocation().GetZone().GetValue(),
 			client.Proto().GetLocation().GetCampus().GetValue())
 	}
-	_, err := tx.Exec(str, args...)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
 	return err
 }
 
@@ -391,12 +404,14 @@ func batchAddClientStat(tx *BaseTx, client2Stats map[string][]*apiservice.StatIn
 			 values`
 	first := true
 	args := make([]interface{}, 0)
+	idx := 1
 	for clientId, stats := range client2Stats {
 		for _, entry := range stats {
 			if !first {
 				str += ","
 			}
-			str += "(?, ?, ?, ?, ?)"
+			str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", idx, idx+1, idx+2, idx+3, idx+4)
+			idx += 5
 			first = false
 			args = append(args,
 				clientId,
@@ -406,7 +421,11 @@ func batchAddClientStat(tx *BaseTx, client2Stats map[string][]*apiservice.StatIn
 				entry.GetPath().GetValue())
 		}
 	}
-	_, err := tx.Exec(str, args...)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
 	return err
 }
 
@@ -419,11 +438,13 @@ func addClientStat(tx *BaseTx, client *model.Client) error {
 			 values`
 	first := true
 	args := make([]interface{}, 0)
+	idx := 1
 	for _, entry := range stats {
 		if !first {
 			str += ","
 		}
-		str += "(?, ?, ?, ?, ?)"
+		str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d)", idx, idx+1, idx+2, idx+3, idx+4)
+		idx += 5
 		first = false
 		args = append(args,
 			client.Proto().GetId().GetValue(),
@@ -432,21 +453,29 @@ func addClientStat(tx *BaseTx, client *model.Client) error {
 			entry.GetProtocol().GetValue(),
 			entry.GetPath().GetValue())
 	}
-	_, err := tx.Exec(str, args...)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
 	return err
 }
 
 func updateClientMain(tx *BaseTx, client *model.Client) error {
-	str := `update client set host = ?,
-	 type = ?, version = ?, region = ?, zone = ?, campus = ?, mtime = sysdate() where id = ?`
-
-	_, err := tx.Exec(str,
+	str := `update client set host = $1, type = $2, version = $3, region = $4, 
+                  zone = $5, campus = $6, mtime = $7 where id = $8`
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(
 		client.Proto().GetHost().GetValue(),
 		client.Proto().GetType().String(),
 		client.Proto().GetVersion().GetValue(),
 		client.Proto().GetLocation().GetRegion().GetValue(),
 		client.Proto().GetLocation().GetZone().GetValue(),
 		client.Proto().GetLocation().GetCampus().GetValue(),
+		GetCurrentTimeFormat(),
 		client.Proto().GetId().GetValue(),
 	)
 
@@ -455,8 +484,12 @@ func updateClientMain(tx *BaseTx, client *model.Client) error {
 
 // updateClientStat 更新client的stat表
 func updateClientStat(tx *BaseTx, client *model.Client) error {
-	deleteStr := "delete from client_stat where cliend_id = ?"
-	if _, err := tx.Exec(deleteStr, client.Proto().GetId().GetValue()); err != nil {
+	deleteStr := "delete from client_stat where cliend_id = $1"
+	stmt, err := tx.Prepare(deleteStr)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(deleteStr, client.Proto().GetId().GetValue()); err != nil {
 		return err
 	}
 	return addClientStat(tx, client)

@@ -1,32 +1,14 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 	"go.uber.org/zap"
+	"time"
 )
 
 var _ store.RoutingConfigStoreV2 = (*routingConfigStoreV2)(nil)
@@ -83,18 +65,22 @@ func (r *routingConfigStoreV2) CreateRoutingConfigV2Tx(tx store.Tx, conf *model.
 
 func (r *routingConfigStoreV2) createRoutingConfigV2Tx(tx *BaseTx, conf *model.RouterConfig) error {
 	// 删除无效的数据
-	if _, err := tx.Exec("DELETE FROM routing_config_v2 WHERE id = ? AND flag = 1", conf.ID); err != nil {
+	stmt, err := tx.Prepare("DELETE FROM routing_config_v2 WHERE id = $1 AND flag = 1")
+	if err != nil {
+		return store.Error(err)
+	}
+	if _, err = stmt.Exec(conf.ID); err != nil {
 		log.Errorf("[Store][database] create routing v2(%+v) err: %s", conf, err.Error())
 		return store.Error(err)
 	}
 
 	insertSQL := "INSERT INTO routing_config_v2(id, namespace, name, policy, config, enable, " +
-		" priority, revision, description, ctime, mtime, etime) VALUES (?,?,?,?,?,?,?,?,?,sysdate(),sysdate(),%s)"
+		" priority, revision, description, ctime, mtime, etime) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'%s')"
 
 	var enable int
 	if conf.Enable {
 		enable = 1
-		insertSQL = fmt.Sprintf(insertSQL, "sysdate()")
+		insertSQL = fmt.Sprintf(insertSQL, GetCurrentTimeFormat())
 	} else {
 		enable = 0
 		insertSQL = fmt.Sprintf(insertSQL, emptyEnableTime)
@@ -102,8 +88,14 @@ func (r *routingConfigStoreV2) createRoutingConfigV2Tx(tx *BaseTx, conf *model.R
 
 	log.Debug("[Store][database] create routing v2", zap.String("sql", insertSQL))
 
-	if _, err := tx.Exec(insertSQL, conf.ID, conf.Namespace, conf.Name, conf.Policy,
-		conf.Config, enable, conf.Priority, conf.Revision, conf.Description); err != nil {
+	stmt, err = tx.Prepare(insertSQL)
+	if err != nil {
+		return store.Error(err)
+	}
+
+	if _, err = stmt.Exec(conf.ID, conf.Namespace, conf.Name, conf.Policy,
+		conf.Config, enable, conf.Priority, conf.Revision, conf.Description,
+		GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 		log.Errorf("[Store][database] create routing v2(%+v) err: %s", conf, err.Error())
 		return store.Error(err)
 	}
@@ -153,10 +145,14 @@ func (r *routingConfigStoreV2) updateRoutingConfigV2Tx(tx *BaseTx, conf *model.R
 		return store.NewStatusError(store.EmptyParamsErr, "missing some params")
 	}
 
-	str := "update routing_config_v2 set name = ?, policy = ?, config = ?, revision = ?, priority = ?, " +
-		" description = ?, mtime = sysdate() where id = ?"
-	if _, err := tx.Exec(str, conf.Name, conf.Policy, conf.Config, conf.Revision, conf.Priority, conf.Description,
-		conf.ID); err != nil {
+	str := "update routing_config_v2 set name = $1, policy = $2, config = $3, revision = $4, priority = $5, " +
+		" description = $6, mtime = $7 where id = $8"
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return store.Error(err)
+	}
+	if _, err = stmt.Exec(conf.Name, conf.Policy, conf.Config, conf.Revision, conf.Priority,
+		conf.Description, GetCurrentTimeFormat(), conf.ID); err != nil {
 		log.Errorf("[Store][database] update routing config v2(%+v) exec err: %s", conf, err.Error())
 		return store.Error(err)
 	}
@@ -176,14 +172,18 @@ func (r *routingConfigStoreV2) EnableRouting(conf *model.RouterConfig) error {
 		)
 		if conf.Enable {
 			enable = 1
-			etimeStr = "sysdate()"
+			etimeStr = GetCurrentTimeFormat()
 		} else {
 			enable = 0
 			etimeStr = emptyEnableTime
 		}
-		str := fmt.Sprintf(
-			`update routing_config_v2 set enable = ?, revision = ?, mtime = sysdate(), etime=%s where id = ?`, etimeStr)
-		if _, err := r.master.Exec(str, enable, conf.Revision, conf.ID); err != nil {
+
+		str := `update routing_config_v2 set enable = $1, revision = $2, mtime = $3, etime=$4 where id = $5`
+		stmt, err := r.master.Prepare(str)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec(enable, conf.Revision, GetCurrentTimeFormat(), etimeStr, conf.ID); err != nil {
 			log.Errorf("[Store][database] update outing config v2(%+v), sql %s, err: %s", conf, str, err)
 			return err
 		}
@@ -202,8 +202,12 @@ func (r *routingConfigStoreV2) DeleteRoutingConfigV2(ruleID string) error {
 		return store.NewStatusError(store.EmptyParamsErr, "missing service id")
 	}
 
-	str := `update routing_config_v2 set flag = 1, mtime = sysdate() where id = ?`
-	if _, err := r.master.Exec(str, ruleID); err != nil {
+	str := `update routing_config_v2 set flag = 1, mtime = $1 where id = $2`
+	stmt, err := r.master.Prepare(str)
+	if err != nil {
+		return store.Error(err)
+	}
+	if _, err = stmt.Exec(GetCurrentTimeFormat(), ruleID); err != nil {
 		log.Errorf("[Store][database] delete routing config v2(%s) err: %s", ruleID, err.Error())
 		return store.Error(err)
 	}
@@ -214,14 +218,14 @@ func (r *routingConfigStoreV2) DeleteRoutingConfigV2(ruleID string) error {
 // GetRoutingConfigsV2ForCache Pull the incremental routing configuration information through mtime
 func (r *routingConfigStoreV2) GetRoutingConfigsV2ForCache(
 	mtime time.Time, firstUpdate bool) ([]*model.RouterConfig, error) {
-	str := `select id, name, policy, config, enable, revision, flag, priority, description,
-	unix_timestamp(ctime), unix_timestamp(mtime), unix_timestamp(etime)  
-	from routing_config_v2 where mtime > FROM_UNIXTIME(?) `
+	str := `select id, name, policy, config, enable, revision, flag, 
+       priority, description, ctime, mtime, etime  
+	from routing_config_v2 where mtime > $1 `
 
 	if firstUpdate {
 		str += " and flag != 1"
 	}
-	rows, err := r.slave.Query(str, timeToTimestamp(mtime))
+	rows, err := r.slave.Query(str, mtime)
 	if err != nil {
 		log.Errorf("[Store][database] query routing configs v2 with mtime err: %s", err.Error())
 		return nil, err
@@ -261,10 +265,10 @@ func (r *routingConfigStoreV2) GetRoutingConfigV2WithIDTx(tx store.Tx, ruleID st
 
 func (r *routingConfigStoreV2) getRoutingConfigV2WithIDTx(tx *BaseTx, ruleID string) (*model.RouterConfig, error) {
 
-	str := `select id, name, policy, config, enable, revision, flag, priority, description,
-	unix_timestamp(ctime), unix_timestamp(mtime), unix_timestamp(etime)
-	from routing_config_v2 
-	where id = ? and flag = 0`
+	str := `select id, name, policy, config, enable, revision, flag, priority, 
+       	description, ctime, mtime, etime
+		from routing_config_v2 
+		where id = $1 and flag = 0`
 	rows, err := tx.Query(str, ruleID)
 	if err != nil {
 		log.Errorf("[Store][database] query routing v2 with id(%s) err: %s", ruleID, err.Error())
@@ -289,21 +293,17 @@ func fetchRoutingConfigV2Rows(rows *sql.Rows) ([]*model.RouterConfig, error) {
 	var out []*model.RouterConfig
 	for rows.Next() {
 		var (
-			entry               model.RouterConfig
-			flag, enable        int
-			ctime, mtime, etime int64
+			entry        model.RouterConfig
+			flag, enable int
 		)
 
 		err := rows.Scan(&entry.ID, &entry.Name, &entry.Policy, &entry.Config, &enable, &entry.Revision,
-			&flag, &entry.Priority, &entry.Description, &ctime, &mtime, &etime)
+			&flag, &entry.Priority, &entry.Description, &entry.CreateTime, &entry.ModifyTime, &entry.EnableTime)
 		if err != nil {
 			log.Errorf("[database][store] fetch routing config v2 scan err: %s", err.Error())
 			return nil, err
 		}
 
-		entry.CreateTime = time.Unix(ctime, 0)
-		entry.ModifyTime = time.Unix(mtime, 0)
-		entry.EnableTime = time.Unix(etime, 0)
 		entry.Valid = true
 		if flag == 1 {
 			entry.Valid = false

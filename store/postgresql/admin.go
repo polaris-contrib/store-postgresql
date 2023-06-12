@@ -1,36 +1,19 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"context"
 	"database/sql"
 	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
-
-	_ "github.com/lib/pq"
 	"github.com/polarismesh/polaris/common/eventhub"
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	_ "github.com/lib/pq"
 )
 
 const (
@@ -73,13 +56,16 @@ type leaderElectionStore struct {
 }
 
 // CreateLeaderElection insert election key into leader table
-func (l leaderElectionStore) CreateLeaderElection(key string) error {
+func (l *leaderElectionStore) CreateLeaderElection(key string) error {
 	log.Debugf("[Store][database] create leader election (%s)", key)
 
 	return l.master.processWithTransaction("createLeaderElection", func(tx *BaseTx) error {
-		mainStr := "insert ignore into leader_election (elect_key, leader) values (?, ?)"
+		stmt, err := tx.Prepare("INSERT INTO leader_election(elect_key,leader) SELECT $1,$2 WHERE NOT EXISTS (SELECT 1 FROM leader_election WHERE elect_key=$3 AND leader=$4)")
+		if err != nil {
+			return err
+		}
 
-		_, err := tx.Exec(mainStr, key, "")
+		_, err = stmt.Exec(key, "", key, "")
 		if err != nil {
 			log.Errorf("[Store][database] create leader election (%s), err: %s", key, err.Error())
 		}
@@ -94,10 +80,10 @@ func (l leaderElectionStore) CreateLeaderElection(key string) error {
 }
 
 // GetVersion get the version from election
-func (l leaderElectionStore) GetVersion(key string) (int64, error) {
+func (l *leaderElectionStore) GetVersion(key string) (int64, error) {
 	log.Debugf("[Store][database] get version (%s)", key)
 
-	mainStr := "select version from leader_election where elect_key = ?"
+	mainStr := "select version from leader_election where elect_key = $1"
 
 	var count int64
 	err := l.master.DB.QueryRow(mainStr, key).Scan(&count)
@@ -109,13 +95,17 @@ func (l leaderElectionStore) GetVersion(key string) (int64, error) {
 }
 
 // CompareAndSwapVersion compare key version and update
-func (l leaderElectionStore) CompareAndSwapVersion(key string, curVersion int64, newVersion int64, leader string) (bool, error) {
+func (l *leaderElectionStore) CompareAndSwapVersion(key string, curVersion int64, newVersion int64, leader string) (bool, error) {
 	var rows int64
 
 	err := l.master.processWithTransaction("compareAndSwapVersion", func(tx *BaseTx) error {
 		log.Debugf("[Store][database] compare and swap version (%s, %d, %d, %s)", key, curVersion, newVersion, leader)
-		mainStr := "update leader_election set leader = ?, version = ? where elect_key = ? and version = ?"
-		result, err := tx.Exec(mainStr, leader, newVersion, key, curVersion)
+
+		stmt, err := tx.Prepare("update leader_election set leader = $1, version = $2 where elect_key = $3 and version = $4")
+		if err != nil {
+			return store.Error(err)
+		}
+		result, err := stmt.Exec(leader, newVersion, key, curVersion)
 		if err != nil {
 			log.Errorf("[Store][database] compare and swap version (%s), err: %s", key, err.Error())
 			return store.Error(err)
@@ -140,28 +130,30 @@ func (l leaderElectionStore) CompareAndSwapVersion(key string, curVersion int64,
 }
 
 // CheckMtimeExpired check last modify time expired
-func (l leaderElectionStore) CheckMtimeExpired(key string, leaseTime int32) (string, bool, error) {
+func (l *leaderElectionStore) CheckMtimeExpired(key string, leaseTime int32) (string, bool, error) {
 	log.Debugf("[Store][database] check mtime expired (%s, %d)", key, leaseTime)
 
-	mainStr := "select leader, FROM_UNIXTIME(UNIX_TIMESTAMP(SYSDATE())) - mtime from leader_election where elect_key = ?"
+	mainStr := "select leader, mtime from leader_election where elect_key = $1"
 
 	var (
-		leader   string
-		diffTime int32
+		leader string
+		mtime  time.Time
 	)
 
-	err := l.master.DB.QueryRow(mainStr, key).Scan(&leader, &diffTime)
+	err := l.master.DB.QueryRow(mainStr, key).Scan(&leader, &mtime)
 	if err != nil {
 		log.Errorf("[Store][database] check mtime expired (%s), err: %s", key, err.Error())
 	}
 
-	return leader, diffTime > leaseTime, store.Error(err)
+	diffTime := CurrDiffTimeSecond(mtime)
+
+	return leader, int32(diffTime) > leaseTime, store.Error(err)
 }
 
-func (l leaderElectionStore) ListLeaderElections() ([]*model.LeaderElection, error) {
+func (l *leaderElectionStore) ListLeaderElections() ([]*model.LeaderElection, error) {
 	log.Info("[Store][database] list leader election")
 
-	mainStr := "select elect_key, leader, UNIX_TIMESTAMP(ctime), UNIX_TIMESTAMP(mtime) from leader_election"
+	mainStr := "select elect_key, leader, ctime, mtime from leader_election"
 	rows, err := l.master.Query(mainStr)
 	if err != nil {
 		log.Errorf("[Store][database] list leader election query err: %s", err.Error())
@@ -251,7 +243,7 @@ func (le *leaderElectionStateMachine) mainLoop() {
 
 // tick 定时校验主健康状况
 func (le *leaderElectionStateMachine) tick() {
-	// 校验校验次数
+	// 校验次数
 	if le.checkReleaseTickLimit() {
 		log.Infof("[Store][database] abandon leader election in this tick (%s)", le.electKey)
 		return
@@ -471,9 +463,13 @@ func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize
 
 	var rows int64
 	err := m.master.processWithTransaction("batchCleanDeletedInstances", func(tx *BaseTx) error {
-		mainStr := "delete from instance where flag = 1 and " +
-			"mtime <= FROM_UNIXTIME(UNIX_TIMESTAMP(SYSDATE()) - ?) limit ?"
-		result, err := tx.Exec(mainStr, int32(timeout.Seconds()), batchSize)
+		stmt, err := tx.Prepare("delete from instance where id in (select id from instance where flag = 1 and mtime <= $1 limit $2)")
+		if err != nil {
+			return store.Error(err)
+		}
+
+		diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
+		result, err := stmt.Exec(UnixSecondToTime(diffTime), batchSize)
 		if err != nil {
 			log.Errorf("[Store][database] batch clean soft deleted instances(%d), err: %s", batchSize, err.Error())
 			return store.Error(err)
@@ -502,9 +498,9 @@ func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize
 func (m *adminStore) GetUnHealthyInstances(timeout time.Duration, limit uint32) ([]string, error) {
 	log.Infof("[Store][database] get unhealthy instances which mtime timeout %s (%d)", timeout, limit)
 
-	queryStr := "select id from instance where flag=0 and enable_health_check=1 and health_status=0 " +
-		"and mtime < FROM_UNIXTIME(UNIX_TIMESTAMP(SYSDATE()) - ?) limit ?"
-	rows, err := m.master.Query(queryStr, int32(timeout.Seconds()), limit)
+	diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
+	queryStr := "select id from instance where flag=0 and enable_health_check=1 and health_status=0 and mtime < $1 limit $2"
+	rows, err := m.master.Query(queryStr, UnixSecondToTime(diffTime), limit)
 	if err != nil {
 		log.Errorf("[Store][database] get unhealthy instances, err: %s", err.Error())
 		return nil, store.Error(err)
@@ -535,9 +531,13 @@ func (m *adminStore) BatchCleanDeletedClients(timeout time.Duration, batchSize u
 
 	var rows int64
 	err := m.master.processWithTransaction("batchCleanDeletedClients", func(tx *BaseTx) error {
-		mainStr := "delete from client where flag = 1 and " +
-			"mtime <= FROM_UNIXTIME(UNIX_TIMESTAMP(SYSDATE()) - ?) limit ?"
-		result, err := tx.Exec(mainStr, int32(timeout.Seconds()), batchSize)
+		stmt, err := tx.Prepare("delete from client where id in (select id from client where flag = 1 and mtime <= $1 limit $2)")
+		if err != nil {
+			return store.Error(err)
+		}
+
+		diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
+		result, err := stmt.Exec(UnixSecondToTime(diffTime), batchSize)
 		if err != nil {
 			log.Errorf("[Store][database] batch clean soft deleted clients(%d), err: %s", batchSize, err.Error())
 			return store.Error(err)

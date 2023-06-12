@@ -1,42 +1,14 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"bytes"
 	"database/sql"
+	"github.com/polarismesh/polaris/common/log"
+	"github.com/polarismesh/polaris/store"
 	"strings"
 	"time"
 	"unicode"
-
-	"github.com/polarismesh/polaris/common/log"
-	"github.com/polarismesh/polaris/store"
 )
-
-// timeToTimestamp 转时间戳（秒）
-// 由于 FROM_UNIXTIME 不支持负数，所以小于0的情况赋值为 1
-func timeToTimestamp(t time.Time) int64 {
-	ts := t.Unix()
-	if ts < 0 {
-		ts = 1
-	}
-	return ts
-}
 
 func toUnderscoreName(name string) string {
 	var buf bytes.Buffer
@@ -191,4 +163,41 @@ func GetCurrentTimeFormat() string {
 	currentTime := time.Now().In(loc)
 	format := currentTime.Format("2006-01-02 15:04:05")
 	return format
+}
+
+func CurrDiffTimeSecond(beforeTime time.Time) float64 {
+	loc := GetLocation()
+	currentTime := time.Now().In(loc)
+	diff := beforeTime.Sub(currentTime)
+	return diff.Seconds()
+}
+
+func GetCurrentSsTimestamp() int64 {
+	loc := GetLocation()
+	now := time.Now().In(loc)
+	curTime := now.Unix()
+	return curTime
+}
+
+// UnixSecondToTime 秒级时间戳转time
+func UnixSecondToTime(second int64) time.Time {
+	loc := GetLocation()
+	return time.Unix(second, 0).In(loc)
+}
+
+// UnixMilliToTime 毫秒级时间戳转time
+func UnixMilliToTime(milli int64) time.Time {
+	loc := GetLocation()
+	return time.Unix(milli/1000, (milli%1000)*(1000*1000)).In(loc)
+}
+
+// UnixNanoToTime 纳秒级时间戳转time
+func UnixNanoToTime(nano int64) time.Time {
+	loc := GetLocation()
+	return time.Unix(nano/(1000*1000*1000), nano%(1000*1000*1000)).In(loc)
+}
+
+// ConvertSecond 转换指定时间的毫秒
+func ConvertSecond(ctime time.Time) int64 {
+	return ctime.In(GetLocation()).Unix()
 }

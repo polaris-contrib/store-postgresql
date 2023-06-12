@@ -1,28 +1,10 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
-	"time"
-
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
+	"time"
 )
 
 var _ store.ConfigFileReleaseStore = (*configFileReleaseStore)(nil)
@@ -35,18 +17,28 @@ type configFileReleaseStore struct {
 // CreateConfigFileRelease 新建配置文件发布
 func (cfr *configFileReleaseStore) CreateConfigFileRelease(tx store.Tx,
 	fileRelease *model.ConfigFileRelease) (*model.ConfigFileRelease, error) {
-	s := "insert into config_file_release(name, namespace, `group`, file_name, content, comment, md5, version, " +
+	s := "insert into config_file_release(name, namespace, \"group\", file_name, content, comment, md5, version, " +
 		" create_time, create_by, modify_time, modify_by) values" +
-		"(?,?,?,?,?,?,?,?, sysdate(),?,sysdate(),?)"
+		"($1,$2,$3,$4,$5,$6,$7,$8, $9,$10,$11,$12)"
 	var err error
 	if tx != nil {
-		_, err = tx.GetDelegateTx().(*BaseTx).Exec(s, fileRelease.Name, fileRelease.Namespace, fileRelease.Group,
-			fileRelease.FileName, fileRelease.Content, fileRelease.Comment, fileRelease.Md5, fileRelease.Version,
-			fileRelease.CreateBy, fileRelease.ModifyBy)
+		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(s)
+		if err != nil {
+			return nil, store.Error(err)
+		}
+		_, err = stmt.Exec(fileRelease.Name, fileRelease.Namespace, fileRelease.Group,
+			fileRelease.FileName, fileRelease.Content, fileRelease.Comment, fileRelease.Md5,
+			fileRelease.Version, GetCurrentTimeFormat(), fileRelease.CreateBy,
+			GetCurrentTimeFormat(), fileRelease.ModifyBy)
 	} else {
-		_, err = cfr.db.Exec(s, fileRelease.Name, fileRelease.Namespace, fileRelease.Group, fileRelease.FileName,
-			fileRelease.Content, fileRelease.Comment, fileRelease.Md5, fileRelease.Version, fileRelease.CreateBy,
-			fileRelease.ModifyBy)
+		stmt, err := cfr.db.Prepare(s)
+		if err != nil {
+			return nil, store.Error(err)
+		}
+		_, err = stmt.Exec(fileRelease.Name, fileRelease.Namespace, fileRelease.Group,
+			fileRelease.FileName, fileRelease.Content, fileRelease.Comment, fileRelease.Md5,
+			fileRelease.Version, GetCurrentTimeFormat(), fileRelease.CreateBy,
+			GetCurrentTimeFormat(), fileRelease.ModifyBy)
 	}
 	if err != nil {
 		return nil, store.Error(err)
@@ -57,16 +49,25 @@ func (cfr *configFileReleaseStore) CreateConfigFileRelease(tx store.Tx,
 // UpdateConfigFileRelease 更新配置文件发布
 func (cfr *configFileReleaseStore) UpdateConfigFileRelease(tx store.Tx,
 	fileRelease *model.ConfigFileRelease) (*model.ConfigFileRelease, error) {
-	s := "update config_file_release set name = ? , content = ?, comment = ?, md5 = ?, version = ?, flag = 0, " +
-		" modify_time = sysdate(), modify_by = ? where namespace = ? and `group` = ? and file_name = ?"
+	s := "update config_file_release set name = $1 , content = $2, comment = $3, md5 = $4, version = $5, flag = 0, " +
+		" modify_time = $6, modify_by = $7 where namespace = $8 and group = $9 and file_name = $10"
 	var err error
 	if tx != nil {
-		_, err = tx.GetDelegateTx().(*BaseTx).Exec(s, fileRelease.Name, fileRelease.Content, fileRelease.Comment,
-			fileRelease.Md5, fileRelease.Version, fileRelease.ModifyBy, fileRelease.Namespace, fileRelease.Group,
-			fileRelease.FileName)
+		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(s)
+		if err != nil {
+			return nil, store.Error(err)
+		}
+		_, err = stmt.Exec(fileRelease.Name, fileRelease.Content, fileRelease.Comment,
+			fileRelease.Md5, fileRelease.Version, GetCurrentTimeFormat(), fileRelease.ModifyBy,
+			fileRelease.Namespace, fileRelease.Group, fileRelease.FileName)
 	} else {
-		_, err = cfr.db.Exec(s, fileRelease.Name, fileRelease.Content, fileRelease.Comment, fileRelease.Md5,
-			fileRelease.Version, fileRelease.ModifyBy, fileRelease.Namespace, fileRelease.Group, fileRelease.FileName)
+		stmt, err := cfr.db.Prepare(s)
+		if err != nil {
+			return nil, store.Error(err)
+		}
+		_, err = stmt.Exec(fileRelease.Name, fileRelease.Content, fileRelease.Comment,
+			fileRelease.Md5, fileRelease.Version, GetCurrentTimeFormat(), fileRelease.ModifyBy,
+			fileRelease.Namespace, fileRelease.Group, fileRelease.FileName)
 	}
 	if err != nil {
 		return nil, store.Error(err)
@@ -87,10 +88,10 @@ func (cfr *configFileReleaseStore) GetConfigFileReleaseWithAllFlag(tx store.Tx, 
 
 func (cfr *configFileReleaseStore) getConfigFileReleaseByFlag(tx store.Tx, namespace, group,
 	fileName string, withAllFlag bool) (*model.ConfigFileRelease, error) {
-	querySql := cfr.baseQuerySql() + "where namespace = ? and `group` = ? and file_name = ? and flag = 0"
+	querySql := cfr.baseQuerySql() + "where namespace = $1 and group = $2 and file_name = $3 and flag = 0"
 
 	if withAllFlag {
-		querySql = cfr.baseQuerySql() + "where namespace = ? and `group` = ? and file_name = ?"
+		querySql = cfr.baseQuerySql() + "where namespace = $1 and group = $2 and file_name = $3"
 	}
 
 	var (
@@ -118,13 +119,21 @@ func (cfr *configFileReleaseStore) getConfigFileReleaseByFlag(tx store.Tx, names
 
 func (cfr *configFileReleaseStore) DeleteConfigFileRelease(tx store.Tx, namespace, group,
 	fileName, deleteBy string) error {
-	s := "update config_file_release set flag = 1, modify_time = sysdate(), modify_by = ?, version = version + 1, " +
-		" md5='' where namespace = ? and `group` = ? and file_name = ?"
+	s := "update config_file_release set flag = 1, modify_time = $1, modify_by = $2, version = version + 1, " +
+		" md5='' where namespace = $3 and group = $4 and file_name = $5"
 	var err error
 	if tx != nil {
-		_, err = tx.GetDelegateTx().(*BaseTx).Exec(s, deleteBy, namespace, group, fileName)
+		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(s)
+		if err != nil {
+			return store.Error(err)
+		}
+		_, err = stmt.Exec(GetCurrentTimeFormat(), deleteBy, namespace, group, fileName)
 	} else {
-		_, err = cfr.db.Exec(s, deleteBy, namespace, group, fileName)
+		stmt, err := cfr.db.Prepare(s)
+		if err != nil {
+			return store.Error(err)
+		}
+		_, err = stmt.Exec(GetCurrentTimeFormat(), deleteBy, namespace, group, fileName)
 	}
 	if err != nil {
 		return store.Error(err)
@@ -135,8 +144,8 @@ func (cfr *configFileReleaseStore) DeleteConfigFileRelease(tx store.Tx, namespac
 // FindConfigFileReleaseByModifyTimeAfter 获取最后更新时间大于某个时间点的发布，注意包含 flag = 1 的，为了能够获取被删除的 release
 func (cfr *configFileReleaseStore) FindConfigFileReleaseByModifyTimeAfter(
 	modifyTime time.Time) ([]*model.ConfigFileRelease, error) {
-	s := cfr.baseQuerySql() + " where modify_time > FROM_UNIXTIME(?)"
-	rows, err := cfr.slave.Query(s, timeToTimestamp(modifyTime))
+	s := cfr.baseQuerySql() + " where modify_time > $1"
+	rows, err := cfr.slave.Query(s, modifyTime)
 	if err != nil {
 		return nil, err
 	}
@@ -149,8 +158,8 @@ func (cfr *configFileReleaseStore) FindConfigFileReleaseByModifyTimeAfter(
 }
 
 func (cfr *configFileReleaseStore) CountConfigFileReleaseEachGroup() (map[string]map[string]int64, error) {
-	metricsSql := "SELECT namespace, `group`, count(file_name) FROM config_file_release " +
-		" WHERE flag = 0 GROUP by namespace, `group`"
+	metricsSql := "SELECT namespace, group, count(file_name) FROM config_file_release " +
+		" WHERE flag = 0 GROUP by namespace, group"
 	rows, err := cfr.slave.Query(metricsSql)
 	if err != nil {
 		return nil, store.Error(err)
@@ -181,8 +190,8 @@ func (cfr *configFileReleaseStore) CountConfigFileReleaseEachGroup() (map[string
 }
 
 func (cfr *configFileReleaseStore) baseQuerySql() string {
-	return "select id, name, namespace, `group`, file_name, content, IFNULL(comment, ''), md5, version, " +
-		" UNIX_TIMESTAMP(create_time), IFNULL(create_by, ''), UNIX_TIMESTAMP(modify_time), IFNULL(modify_by, ''), " +
+	return "select id, name, namespace, group, file_name, content, comment, md5, version, " +
+		" create_time, create_by, modify_time, modify_by, " +
 		" flag from config_file_release "
 }
 
@@ -196,16 +205,13 @@ func (cfr *configFileReleaseStore) transferRows(rows *sql.Rows) ([]*model.Config
 
 	for rows.Next() {
 		fileRelease := &model.ConfigFileRelease{}
-		var ctime, mtime int64
-		err := rows.Scan(&fileRelease.Id, &fileRelease.Name, &fileRelease.Namespace, &fileRelease.Group,
-			&fileRelease.FileName, &fileRelease.Content,
-			&fileRelease.Comment, &fileRelease.Md5, &fileRelease.Version, &ctime, &fileRelease.CreateBy,
-			&mtime, &fileRelease.ModifyBy, &fileRelease.Flag)
+		err := rows.Scan(&fileRelease.Id, &fileRelease.Name, &fileRelease.Namespace,
+			&fileRelease.Group, &fileRelease.FileName, &fileRelease.Content, &fileRelease.Comment,
+			&fileRelease.Md5, &fileRelease.Version, &fileRelease.CreateTime, &fileRelease.CreateBy,
+			&fileRelease.ModifyTime, &fileRelease.ModifyBy, &fileRelease.Flag)
 		if err != nil {
 			return nil, err
 		}
-		fileRelease.CreateTime = time.Unix(ctime, 0)
-		fileRelease.ModifyTime = time.Unix(mtime, 0)
 
 		fileReleases = append(fileReleases, fileRelease)
 	}

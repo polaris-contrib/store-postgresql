@@ -1,26 +1,8 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"errors"
 	"fmt"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/plugin"
 	"github.com/polarismesh/polaris/store"
@@ -30,15 +12,15 @@ const (
 	// SystemNamespace system namespace
 	SystemNamespace = "Polaris"
 	// STORENAME database storage name
-	STORENAME = "postgresql"
+	STORENAME = "postgresqlStore"
 	// DefaultConnMaxLifetime default maximum connection lifetime
 	DefaultConnMaxLifetime = 60 * 30 // 默认是30分钟
 	// emptyEnableTime 规则禁用时启用时间的默认值
 	emptyEnableTime = "STR_TO_DATE('1980-01-01 00:00:01', '%Y-%m-%d %H:%i:%s')"
 )
 
-// PostgresqlStore 实现了Store接口
-type PostgresqlStore struct {
+// postgresqlStore 实现了Store接口
+type postgresqlStore struct {
 	*namespaceStore
 	// client info stores
 	*clientStore
@@ -84,12 +66,12 @@ type PostgresqlStore struct {
 }
 
 // Name 实现Name函数
-func (p *PostgresqlStore) Name() string {
+func (p *postgresqlStore) Name() string {
 	return STORENAME
 }
 
 // Initialize 初始化函数
-func (p *PostgresqlStore) Initialize(conf *store.Config) error {
+func (p *postgresqlStore) Initialize(conf *store.Config) error {
 	if p.start {
 		return nil
 	}
@@ -133,7 +115,7 @@ func (p *PostgresqlStore) Initialize(conf *store.Config) error {
 }
 
 // Destroy 退出函数
-func (p *PostgresqlStore) Destroy() error {
+func (p *postgresqlStore) Destroy() error {
 	p.start = false
 
 	if p.master != nil {
@@ -158,7 +140,7 @@ func (p *PostgresqlStore) Destroy() error {
 }
 
 // CreateTransaction 创建一个事务
-func (p *PostgresqlStore) CreateTransaction() (store.Transaction, error) {
+func (p *postgresqlStore) CreateTransaction() (store.Transaction, error) {
 	// 每次创建事务前，还是需要ping一下
 	_ = p.masterTx.Ping()
 
@@ -174,7 +156,7 @@ func (p *PostgresqlStore) CreateTransaction() (store.Transaction, error) {
 	return nt, nil
 }
 
-func (p *PostgresqlStore) StartTx() (store.Tx, error) {
+func (p *postgresqlStore) StartTx() (store.Tx, error) {
 	tx, err := p.masterTx.Begin()
 	if err != nil {
 		return nil, err
@@ -183,7 +165,7 @@ func (p *PostgresqlStore) StartTx() (store.Tx, error) {
 }
 
 func buildEtimeStr(enable bool) string {
-	etimeStr := "sysdate()"
+	etimeStr := GetCurrentTimeFormat()
 	if !enable {
 		etimeStr = emptyEnableTime
 	}
@@ -253,7 +235,7 @@ func parseStoreConfig(opts interface{}) (*dbConfig, error) {
 }
 
 // newStore 初始化子类
-func (p *PostgresqlStore) newStore() {
+func (p *postgresqlStore) newStore() {
 	p.namespaceStore = &namespaceStore{master: p.master, slave: p.slave}
 
 	p.serviceStore = &serviceStore{master: p.master, slave: p.slave}
@@ -295,4 +277,12 @@ func (p *PostgresqlStore) newStore() {
 	p.routingConfigStoreV2 = &routingConfigStoreV2{master: p.master, slave: p.slave}
 
 	p.adminStore = newAdminStore(p.master)
+}
+
+func init() {
+	s := &postgresqlStore{}
+	err := store.RegisterStore(s)
+	if err != nil {
+		log.Errorf("[Store][database] RegisterStore err: %+v", err)
+	}
 }

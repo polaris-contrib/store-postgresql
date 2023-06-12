@@ -1,33 +1,15 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
 	"go.uber.org/zap"
+	"strings"
+	"time"
 )
 
 var (
@@ -92,9 +74,13 @@ func (s *strategyStore) addStrategy(strategy *model.StrategyDetail) error {
 	}
 
 	// 保存策略主信息
-	saveMainSql := "INSERT INTO auth_strategy(`id`, `name`, `action`, `owner`, `comment`, `flag`, " +
-		" `default`, `revision`) VALUES (?,?,?,?,?,?,?,?)"
-	if _, err = tx.Exec(saveMainSql,
+	saveMainSql := "INSERT INTO auth_strategy(id, name, action, owner, comment, flag, " +
+		" 'default', revision) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"
+	stmt, err := tx.Prepare(saveMainSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(
 		[]interface{}{
 			strategy.ID, strategy.Name, strategy.Action, strategy.Owner, strategy.Comment,
 			0, isDefault, strategy.Revision}...,
@@ -152,8 +138,12 @@ func (s *strategyStore) updateStrategy(strategy *model.ModifyStrategyDetail) err
 	}
 
 	// 保存策略主信息
-	saveMainSql := "UPDATE auth_strategy SET action = ?, comment = ?, mtime = sysdate() WHERE id = ?"
-	if _, err = tx.Exec(saveMainSql, []interface{}{strategy.Action, strategy.Comment, strategy.ID}...); err != nil {
+	saveMainSql := "UPDATE auth_strategy SET action = $1, comment = $2, mtime = $3 WHERE id = $4"
+	stmt, err := tx.Prepare(saveMainSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{strategy.Action, strategy.Comment, GetCurrentTimeFormat(), strategy.ID}...); err != nil {
 		log.Error("[Store][Strategy] update strategy main info", zap.Error(err))
 		return err
 	}
@@ -186,19 +176,29 @@ func (s *strategyStore) deleteStrategy(id string) error {
 
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.Exec("UPDATE auth_strategy SET flag = 1, mtime = sysdate() WHERE id = ?", []interface{}{
+	stmt, err := tx.Prepare("UPDATE auth_strategy SET flag = 1, mtime = $1 WHERE id = $2")
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
+		GetCurrentTimeFormat(),
 		id,
 	}...); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("DELETE FROM auth_strategy_resource WHERE strategy_id = ?", []interface{}{
+	stmt, err = tx.Prepare("DELETE FROM auth_strategy_resource WHERE strategy_id = $1")
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
 		id,
 	}...); err != nil {
 		return err
 	}
 
-	if _, err = tx.Exec("DELETE FROM auth_principal WHERE strategy_id = ?", []interface{}{
+	stmt, err = tx.Prepare("DELETE FROM auth_principal WHERE strategy_id = $1")
+	if _, err = stmt.Exec([]interface{}{
 		id,
 	}...); err != nil {
 		return err
@@ -220,10 +220,12 @@ func (s *strategyStore) addStrategyPrincipals(tx *BaseTx, id string, principals 
 	savePrincipalSql := "INSERT IGNORE INTO auth_principal(strategy_id, principal_id, principal_role) VALUES "
 	values := make([]string, 0)
 	args := make([]interface{}, 0)
+	index := 1
 
 	for i := range principals {
 		principal := principals[i]
-		values = append(values, "(?,?,?)")
+		values = append(values, fmt.Sprintf("($%d,$%d,$%d)", index, index+1, index+2))
+		index += 3
 		args = append(args, id, principal.PrincipalID, principal.PrincipalRole)
 	}
 
@@ -232,7 +234,11 @@ func (s *strategyStore) addStrategyPrincipals(tx *BaseTx, id string, principals 
 	log.Debug("[Store][Strategy] add strategy principal", zap.String("sql", savePrincipalSql),
 		zap.Any("args", args))
 
-	_, err := tx.Exec(savePrincipalSql, args...)
+	stmt, err := tx.Prepare(savePrincipalSql)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
 	return err
 }
 
@@ -243,13 +249,15 @@ func (s *strategyStore) deleteStrategyPrincipals(tx *BaseTx, id string,
 		return nil
 	}
 
-	savePrincipalSql := "DELETE FROM auth_principal WHERE strategy_id = ? AND principal_id = ? " +
-		" AND principal_role = ?"
+	savePrincipalSql := "DELETE FROM auth_principal WHERE strategy_id = $1 AND principal_id = $2 " +
+		" AND principal_role = $3"
 	for i := range principals {
 		principal := principals[i]
-		if _, err := tx.Exec(savePrincipalSql, []interface{}{
-			id, principal.PrincipalID, principal.PrincipalRole,
-		}...); err != nil {
+		stmt, err := tx.Prepare(savePrincipalSql)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec([]interface{}{id, principal.PrincipalID, principal.PrincipalRole}...); err != nil {
 			return err
 		}
 	}
@@ -262,13 +270,15 @@ func (s *strategyStore) addStrategyResources(tx *BaseTx, id string, resources []
 		return nil
 	}
 
-	saveResSql := "REPLACE INTO auth_strategy_resource(strategy_id, res_type, res_id) VALUES "
+	saveResSql := "INSERT INTO auth_strategy_resource(strategy_id, res_type, res_id) VALUES "
 	values := make([]string, 0)
 	args := make([]interface{}, 0)
+	index := 1
 
 	for i := range resources {
 		resource := resources[i]
-		values = append(values, "(?,?,?)")
+		values = append(values, fmt.Sprintf("($%d,$%d,$%d)", index, index+1, index+2))
+		index += 3
 		args = append(args, resource.StrategyID, resource.ResType, resource.ResID)
 	}
 
@@ -279,7 +289,11 @@ func (s *strategyStore) addStrategyResources(tx *BaseTx, id string, resources []
 	saveResSql += strings.Join(values, ",")
 	log.Debug("[Store][Strategy] add strategy resources", zap.String("sql", saveResSql),
 		zap.Any("args", args))
-	_, err := tx.Exec(saveResSql, args...)
+	stmt, err := tx.Prepare(saveResSql)
+	if err != nil {
+		return err
+	}
+	_, err = stmt.Exec(args...)
 	return err
 }
 
@@ -293,9 +307,12 @@ func (s *strategyStore) deleteStrategyResources(tx *BaseTx, id string,
 	for i := range resources {
 		resource := resources[i]
 
-		saveResSql := "DELETE FROM auth_strategy_resource WHERE strategy_id = ? AND res_id = ? AND res_type = ?"
-		if _, err := tx.Exec(
-			saveResSql,
+		saveResSql := "DELETE FROM auth_strategy_resource WHERE strategy_id = $1 AND res_id = $2 AND res_type = $3"
+		stmt, err := tx.Prepare(saveResSql)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec(
 			[]interface{}{resource.StrategyID, resource.ResID, resource.ResType}...,
 		); err != nil {
 			return err
@@ -316,11 +333,15 @@ func (s *strategyStore) LooseAddStrategyResources(resources []model.StrategyReso
 	for i := range resources {
 		resource := resources[i]
 
-		saveResSql := "REPLACE INTO auth_strategy_resource(strategy_id, res_type, res_id) VALUES (?,?,?)"
+		saveResSql := "INSERT INTO auth_strategy_resource(strategy_id, res_type, res_id) VALUES ($1,$2,$3)"
 		args := make([]interface{}, 0)
 		args = append(args, resource.StrategyID, resource.ResType, resource.ResID)
 
-		if _, err = tx.Exec(saveResSql, args...); err != nil {
+		stmt, err := tx.Prepare(saveResSql)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec(args...); err != nil {
 			err = store.Error(err)
 			if store.Code(err) == store.DuplicateEntryErr {
 				continue
@@ -329,8 +350,12 @@ func (s *strategyStore) LooseAddStrategyResources(resources []model.StrategyReso
 		}
 
 		// 主要是为了能够触发 StrategyCache 的刷新逻辑
-		updateStrategySql := "UPDATE auth_strategy SET mtime = sysdate() WHERE id = ?"
-		if _, err = tx.Exec(updateStrategySql, resource.StrategyID); err != nil {
+		updateStrategySql := "UPDATE auth_strategy SET mtime = $1 WHERE id = $2"
+		stmt, err = tx.Prepare(updateStrategySql)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec(GetCurrentTimeFormat(), resource.StrategyID); err != nil {
 			return err
 		}
 	}
@@ -354,18 +379,26 @@ func (s *strategyStore) RemoveStrategyResources(resources []model.StrategyResour
 		resource := resources[i]
 
 		args := make([]interface{}, 0)
-		saveResSql := "DELETE FROM auth_strategy_resource WHERE strategy_id = ? AND res_id = ? AND res_type = ?"
+		saveResSql := "DELETE FROM auth_strategy_resource WHERE strategy_id = $1 AND res_id = $2 AND res_type = $3"
 		args = append(args, resource.StrategyID, resource.ResID, resource.ResType)
 		if resource.StrategyID == "" {
-			saveResSql = "DELETE FROM auth_strategy_resource WHERE res_id = ? AND res_type = ?"
+			saveResSql = "DELETE FROM auth_strategy_resource WHERE res_id = $1 AND res_type = $2"
 			args = append(args, resource.ResID, resource.ResType)
 		}
-		if _, err := tx.Exec(saveResSql, args...); err != nil {
+		stmt, err := tx.Prepare(saveResSql)
+		if err != nil {
+			return err
+		}
+		if _, err := stmt.Exec(args...); err != nil {
 			return err
 		}
 		// 主要是为了能够触发 StrategyCache 的刷新逻辑
-		updateStrategySql := "UPDATE auth_strategy SET mtime = sysdate() WHERE id = ?"
-		if _, err = tx.Exec(updateStrategySql, resource.StrategyID); err != nil {
+		updateStrategySql := "UPDATE auth_strategy SET mtime = $1 WHERE id = $2"
+		stmt, err = tx.Prepare(updateStrategySql)
+		if err != nil {
+			return err
+		}
+		if _, err = stmt.Exec(GetCurrentTimeFormat(), resource.StrategyID); err != nil {
 			return err
 		}
 	}
@@ -386,7 +419,7 @@ func (s *strategyStore) GetStrategyDetail(id string) (*model.StrategyDetail, err
 	}
 
 	querySql := "SELECT ag.id, ag.name, ag.action, ag.owner, ag.default, ag.comment, ag.revision, ag.flag, " +
-		" UNIX_TIMESTAMP(ag.ctime), UNIX_TIMESTAMP(ag.mtime) FROM auth_strategy AS ag WHERE ag.flag = 0 AND ag.id = ?"
+		" ag.ctime, ag.mtime FROM auth_strategy AS ag WHERE ag.flag = 0 AND ag.id = $1"
 
 	row := s.master.QueryRow(querySql, id)
 
@@ -404,16 +437,15 @@ func (s *strategyStore) GetDefaultStrategyDetailByPrincipal(principalId string,
 
 	querySql := `
 	 SELECT ag.id, ag.name, ag.action, ag.owner, ag.default
-		 , ag.comment, ag.revision, ag.flag, UNIX_TIMESTAMP(ag.ctime)
-		 , UNIX_TIMESTAMP(ag.mtime)
+		 , ag.comment, ag.revision, ag.flag, ag.ctime, ag.mtime)
 	 FROM auth_strategy ag
 	 WHERE ag.flag = 0
 		 AND ag.default = 1
 		 AND ag.id IN (
 			 SELECT DISTINCT strategy_id
 			 FROM auth_principal
-			 WHERE principal_id = ?
-				 AND principal_role = ?
+			 WHERE principal_id = $1
+				 AND principal_role = $2
 		 )
 	 `
 
@@ -424,12 +456,11 @@ func (s *strategyStore) GetDefaultStrategyDetailByPrincipal(principalId string,
 // getStrategyDetail
 func (s *strategyStore) getStrategyDetail(row *sql.Row) (*model.StrategyDetail, error) {
 	var (
-		ctime, mtime    int64
 		isDefault, flag int16
 	)
 	ret := new(model.StrategyDetail)
 	if err := row.Scan(&ret.ID, &ret.Name, &ret.Action, &ret.Owner, &isDefault, &ret.Comment,
-		&ret.Revision, &flag, &ctime, &mtime); err != nil {
+		&ret.Revision, &flag, &ret.CreateTime, &ret.ModifyTime); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return nil, nil
@@ -438,8 +469,6 @@ func (s *strategyStore) getStrategyDetail(row *sql.Row) (*model.StrategyDetail, 
 		}
 	}
 
-	ret.CreateTime = time.Unix(ctime, 0)
-	ret.ModifyTime = time.Unix(mtime, 0)
 	ret.Valid = flag == 0
 	ret.Default = isDefault == 1
 
@@ -482,8 +511,8 @@ func (s *strategyStore) listStrategies(filters map[string]string, offset uint32,
 			 ag.default,
 			 ag.revision,
 			 ag.flag,
-			 UNIX_TIMESTAMP(ag.ctime),
-			 UNIX_TIMESTAMP(ag.mtime)
+			 ag.ctime,
+			 ag.mtime
 		   FROM
 			 (
 			   auth_strategy ag
@@ -514,6 +543,7 @@ func (s *strategyStore) queryStrategies(
 	countSql := countSqlPrefix
 
 	args := make([]interface{}, 0)
+	var idx = 1
 	if len(filters) != 0 {
 		querySql += " WHERE "
 		countSql += " WHERE "
@@ -537,18 +567,21 @@ func (s *strategyStore) queryStrategies(
 				if utils.IsPrefixWildName(v) {
 					v = v[:len(v)-1]
 				}
-				querySql += (" " + k + " like ? ")
-				countSql += (" " + k + " like ? ")
+				querySql += " " + k + fmt.Sprintf(" like $%d ", idx)
+				countSql += " " + k + fmt.Sprintf(" like $%d ", idx)
 				args = append(args, "%"+v+"%")
 			} else if k == "ag.owner" {
-				querySql += " (ag.owner = ? OR (ap.principal_id = ? AND ap.principal_role = 1 )) "
-				countSql += " (ag.owner = ? OR (ap.principal_id = ? AND ap.principal_role = 1 )) "
+				querySql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d AND ap.principal_role = 1 )) ", idx, idx+1)
+				countSql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d AND ap.principal_role = 1 )) ", idx, idx+1)
+				idx += 1
 				args = append(args, v, v)
 			} else {
-				querySql += (" " + k + " = ? ")
-				countSql += (" " + k + " = ? ")
+				querySql += " " + k + fmt.Sprintf(" = $%d ", idx)
+				countSql += " " + k + fmt.Sprintf(" = $%d ", idx)
 				args = append(args, v)
 			}
+
+			idx++
 		}
 	}
 
@@ -557,8 +590,8 @@ func (s *strategyStore) queryStrategies(
 		return 0, nil, store.Error(err)
 	}
 
-	querySql += " GROUP BY ag.id ORDER BY ag.mtime LIMIT ?, ? "
-	args = append(args, offset, limit)
+	querySql += fmt.Sprintf(" GROUP BY ag.id ORDER BY ag.mtime LIMIT $%d OFFSET $%d ", idx, idx+1)
+	args = append(args, limit, offset)
 
 	ret, err := s.collectStrategies(s.master.Query, querySql, args, showDetail)
 	if err != nil {
@@ -629,11 +662,11 @@ func (s *strategyStore) GetStrategyDetailsForCache(mtime time.Time,
 
 	args := make([]interface{}, 0)
 	querySql := "SELECT ag.id, ag.name, ag.action, ag.owner, ag.comment, ag.default, ag.revision, ag.flag, " +
-		" UNIX_TIMESTAMP(ag.ctime), UNIX_TIMESTAMP(ag.mtime) FROM auth_strategy ag "
+		" ag.ctime, ag.mtime FROM auth_strategy ag "
 
 	if !firstUpdate {
-		querySql += " WHERE ag.mtime >= FROM_UNIXTIME(?)"
-		args = append(args, timeToTimestamp(mtime))
+		querySql += " WHERE ag.mtime >= $1"
+		args = append(args, mtime)
 	}
 
 	rows, err := tx.Query(querySql, args...)
@@ -675,7 +708,7 @@ func (s *strategyStore) GetStrategyResources(principalId string,
 
 	querySql := "SELECT res_id, res_type FROM auth_strategy_resource WHERE strategy_id IN (SELECT DISTINCT " +
 		" ap.strategy_id FROM auth_principal ap join auth_strategy ar ON ap.strategy_id = ar.id WHERE ar.flag = 0 " +
-		" AND ap.principal_id = ? AND ap.principal_role = ? )"
+		" AND ap.principal_id = $1 AND ap.principal_role = $2 )"
 
 	rows, err := s.master.Query(querySql, principalId, principalRole)
 	if err != nil {
@@ -706,7 +739,7 @@ func (s *strategyStore) GetStrategyResources(principalId string,
 
 func (s *strategyStore) getStrategyPrincipals(queryHander QueryHandler, id string) ([]model.Principal, error) {
 
-	rows, err := queryHander("SELECT principal_id, principal_role FROM auth_principal WHERE strategy_id = ?", id)
+	rows, err := queryHander("SELECT principal_id, principal_role FROM auth_principal WHERE strategy_id = $1", id)
 	if err != nil {
 		switch err {
 		case sql.ErrNoRows:
@@ -732,7 +765,7 @@ func (s *strategyStore) getStrategyPrincipals(queryHander QueryHandler, id strin
 }
 
 func (s *strategyStore) getStrategyResources(queryHander QueryHandler, id string) ([]model.StrategyResource, error) {
-	querySql := "SELECT res_id, res_type FROM auth_strategy_resource WHERE strategy_id = ?"
+	querySql := "SELECT res_id, res_type FROM auth_strategy_resource WHERE strategy_id = $1"
 	rows, err := queryHander(querySql, id)
 	if err != nil {
 		switch err {
@@ -760,20 +793,17 @@ func (s *strategyStore) getStrategyResources(queryHander QueryHandler, id string
 
 func fetchRown2StrategyDetail(rows *sql.Rows) (*model.StrategyDetail, error) {
 	var (
-		ctime, mtime    int64
 		isDefault, flag int16
 	)
 	ret := &model.StrategyDetail{
 		Resources: make([]model.StrategyResource, 0),
 	}
 
-	if err := rows.Scan(&ret.ID, &ret.Name, &ret.Action, &ret.Owner, &ret.Comment, &isDefault, &ret.Revision, &flag,
-		&ctime, &mtime); err != nil {
+	if err := rows.Scan(&ret.ID, &ret.Name, &ret.Action, &ret.Owner, &ret.Comment, &isDefault,
+		&ret.Revision, &flag, &ret.CreateTime, &ret.ModifyTime); err != nil {
 		return nil, store.Error(err)
 	}
 
-	ret.CreateTime = time.Unix(ctime, 0)
-	ret.ModifyTime = time.Unix(mtime, 0)
 	ret.Valid = flag == 0
 
 	if isDefault == 1 {
@@ -794,8 +824,12 @@ func (s *strategyStore) cleanInvalidStrategy(name, owner string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	str := "delete from auth_strategy where name = ? and owner = ? and flag = 1"
-	if _, err = tx.Exec(str, name, owner); err != nil {
+	str := "delete from auth_strategy where name = $1 and owner = $2 and flag = 1"
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(name, owner); err != nil {
 		log.Errorf("[Store][Strategy] clean invalid auth_strategy(%s) err: %s", name, err.Error())
 		return err
 	}
@@ -819,17 +853,20 @@ func cleanLinkStrategy(tx *BaseTx, role model.PrincipalType, principalId, owner 
 				 SELECT DISTINCT ag.id
 				 FROM auth_strategy ag
 				 WHERE ag.default = 1
-					 AND ag.owner = ?
+					 AND ag.owner = $1
 					 AND ag.id IN (
 						 SELECT DISTINCT strategy_id
 						 FROM auth_principal
-						 WHERE principal_id = ?
-							 AND principal_role = ?
+						 WHERE principal_id = $2
+							 AND principal_role = $3
 					 )
 			 )
 		 `
-
-	if _, err := tx.Exec(removeResSql, []interface{}{owner, principalId, role}...); err != nil {
+	stmt, err := tx.Prepare(removeResSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{owner, principalId, role}...); err != nil {
 		return err
 	}
 
@@ -840,27 +877,38 @@ func cleanLinkStrategy(tx *BaseTx, role model.PrincipalType, principalId, owner 
 		 WHERE ag.id IN (
 				 SELECT DISTINCT strategy_id
 				 FROM auth_principal
-				 WHERE principal_id = ?
-					 AND principal_role = ?
+				 WHERE principal_id = $1
+					 AND principal_role = $2
 			 )
 			 AND ag.default = 1
-			 AND ag.owner = ?
+			 AND ag.owner = $3
 	 `
-
-	if _, err := tx.Exec(cleanaRuleSql, []interface{}{principalId, role, owner}...); err != nil {
+	stmt, err = tx.Prepare(cleanaRuleSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{principalId, role, owner}...); err != nil {
 		return err
 	}
 
 	// 调整所关联的鉴权策略的 mtime 数据，保证cache刷新可以获取到变更的数据信息
-	updateStrategySql := "UPDATE auth_strategy SET mtime = sysdate()  WHERE id IN (SELECT DISTINCT " +
-		" strategy_id FROM auth_principal WHERE principal_id = ? AND principal_role = ?)"
-	if _, err := tx.Exec(updateStrategySql, []interface{}{principalId, role}...); err != nil {
+	updateStrategySql := "UPDATE auth_strategy SET mtime = $1  WHERE id IN (SELECT DISTINCT " +
+		" strategy_id FROM auth_principal WHERE principal_id = $2 AND principal_role = $3)"
+	stmt, err = tx.Prepare(updateStrategySql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{principalId, role}...); err != nil {
 		return err
 	}
 
 	// 清理所在的所有鉴权principal
-	cleanPrincipalSql := "DELETE FROM auth_principal WHERE principal_id = ? AND principal_role = ?"
-	if _, err := tx.Exec(cleanPrincipalSql, []interface{}{principalId, role}...); err != nil {
+	cleanPrincipalSql := "DELETE FROM auth_principal WHERE principal_id = $1 AND principal_role = $2"
+	stmt, err = tx.Prepare(cleanPrincipalSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{principalId, role}...); err != nil {
 		return err
 	}
 

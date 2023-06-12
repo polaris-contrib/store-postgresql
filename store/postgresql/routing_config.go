@@ -1,31 +1,13 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
+	"time"
 )
 
 // RoutingConfigStore的实现
@@ -54,8 +36,12 @@ func (rs *routingConfigStore) CreateRoutingConfig(conf *model.RoutingConfig) err
 
 			// 服务配置的创建由外层进行服务的保护，这里不需要加锁
 			str := `insert into routing_config(id, in_bounds, out_bounds, revision, ctime, mtime)
-			values(?,?,?,?,sysdate(),sysdate())`
-			if _, err := tx.Exec(str, conf.ID, conf.InBounds, conf.OutBounds, conf.Revision); err != nil {
+			values($1,$2,$3,$4,$5,$6)`
+			stmt, err := tx.Prepare(str)
+			if err != nil {
+				return store.Error(err)
+			}
+			if _, err = stmt.Exec(conf.ID, conf.InBounds, conf.OutBounds, conf.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 				log.Errorf("[Store][database] create routing(%+v) err: %s", conf, err.Error())
 				return store.Error(err)
 			}
@@ -82,8 +68,12 @@ func (rs *routingConfigStore) UpdateRoutingConfig(conf *model.RoutingConfig) err
 	}
 	return RetryTransaction("updateRoutingConfig", func() error {
 		return rs.master.processWithTransaction("updateRoutingConfig", func(tx *BaseTx) error {
-			str := `update routing_config set in_bounds = ?, out_bounds = ?, revision = ?, mtime = sysdate() where id = ?`
-			if _, err := tx.Exec(str, conf.InBounds, conf.OutBounds, conf.Revision, conf.ID); err != nil {
+			str := `update routing_config set in_bounds = $1, out_bounds = $2, revision = $3, mtime = $4 where id = $5`
+			stmt, err := tx.Prepare(str)
+			if err != nil {
+				return store.Error(err)
+			}
+			if _, err = stmt.Exec(conf.InBounds, conf.OutBounds, conf.Revision, GetCurrentTimeFormat(), conf.ID); err != nil {
 				log.Errorf("[Store][database] update routing config(%+v) exec err: %s", conf, err.Error())
 				return store.Error(err)
 			}
@@ -106,8 +96,11 @@ func (rs *routingConfigStore) DeleteRoutingConfig(serviceID string) error {
 	}
 	return RetryTransaction("deleteRoutingConfig", func() error {
 		return rs.master.processWithTransaction("deleteRoutingConfig", func(tx *BaseTx) error {
-			str := `update routing_config set flag = 1, mtime = sysdate() where id = ?`
-			if _, err := tx.Exec(str, serviceID); err != nil {
+			stmt, err := tx.Prepare(`update routing_config set flag = 1, mtime = $1 where id = $2`)
+			if err != nil {
+				return store.Error(err)
+			}
+			if _, err = stmt.Exec(GetCurrentTimeFormat(), serviceID); err != nil {
 				log.Errorf("[Store][database] delete routing config(%s) err: %s", serviceID, err.Error())
 				return store.Error(err)
 			}
@@ -135,8 +128,11 @@ func (rs *routingConfigStore) DeleteRoutingConfigTx(tx store.Tx, serviceID strin
 
 	dbTx := tx.GetDelegateTx().(*BaseTx)
 
-	str := `update routing_config set flag = 1, mtime = sysdate() where id = ?`
-	if _, err := dbTx.Exec(str, serviceID); err != nil {
+	stmt, err := dbTx.Prepare(`update routing_config set flag = 1, mtime = $1 where id = $2`)
+	if err != nil {
+		return store.Error(err)
+	}
+	if _, err = stmt.Exec(GetCurrentTimeFormat(), serviceID); err != nil {
 		log.Errorf("[Store][database] delete routing config(%s) err: %s", serviceID, err.Error())
 		return store.Error(err)
 	}
@@ -144,15 +140,13 @@ func (rs *routingConfigStore) DeleteRoutingConfigTx(tx store.Tx, serviceID strin
 }
 
 // GetRoutingConfigsForCache 缓存增量拉取
-func (rs *routingConfigStore) GetRoutingConfigsForCache(
-	mtime time.Time, firstUpdate bool) ([]*model.RoutingConfig, error) {
-	str := `select id, in_bounds, out_bounds, revision,
-			flag, unix_timestamp(ctime), unix_timestamp(mtime)  
-			from routing_config where mtime > FROM_UNIXTIME(?)`
+func (rs *routingConfigStore) GetRoutingConfigsForCache(mtime time.Time, firstUpdate bool) ([]*model.RoutingConfig, error) {
+	str := `select id, in_bounds, out_bounds, revision,flag, ctime, mtime  
+			from routing_config where mtime > $1`
 	if firstUpdate {
 		str += " and flag != 1"
 	}
-	rows, err := rs.slave.Query(str, timeToTimestamp(mtime))
+	rows, err := rs.slave.Query(str, mtime)
 	if err != nil {
 		log.Errorf("[Store][database] query routing configs with mtime err: %s", err.Error())
 		return nil, err
@@ -166,12 +160,10 @@ func (rs *routingConfigStore) GetRoutingConfigsForCache(
 }
 
 // GetRoutingConfigWithService 根据服务名+namespace获取对应的配置
-func (rs *routingConfigStore) GetRoutingConfigWithService(
-	name string, namespace string) (*model.RoutingConfig, error) {
+func (rs *routingConfigStore) GetRoutingConfigWithService(name string, namespace string) (*model.RoutingConfig, error) {
 	// 只查询到flag=0的数据
-	str := `select routing_config.id, in_bounds, out_bounds, revision, flag,
-			unix_timestamp(ctime), unix_timestamp(mtime)  
-			from (select id from service where name = ? and namespace = ?) as service, routing_config 
+	str := `select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime  
+			from (select id from service where name = $1 and namespace = $2) as service, routing_config 
 			where service.id = routing_config.id and routing_config.flag = 0`
 	rows, err := rs.master.Query(str, name, namespace)
 	if err != nil {
@@ -194,10 +186,9 @@ func (rs *routingConfigStore) GetRoutingConfigWithService(
 
 // GetRoutingConfigWithID 根据服务ID获取对应的配置
 func (rs *routingConfigStore) GetRoutingConfigWithID(id string) (*model.RoutingConfig, error) {
-	str := `select routing_config.id, in_bounds, out_bounds, revision, flag,
-			unix_timestamp(ctime), unix_timestamp(mtime)
+	str := `select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime
 			from routing_config 
-			where id = ? and flag = 0`
+			where id = $1 and flag = 0`
 	rows, err := rs.master.Query(str, id)
 	if err != nil {
 		log.Errorf("[Store][database] query routing with id(%s) err: %s", id, err.Error())
@@ -220,7 +211,9 @@ func (rs *routingConfigStore) GetRoutingConfigWithID(id string) (*model.RoutingC
 func (rs *routingConfigStore) GetRoutingConfigs(filter map[string]string,
 	offset uint32, limit uint32) (uint32, []*model.ExtendRoutingConfig, error) {
 
-	filterStr, args := genFilterRoutingConfigSQL(filter)
+	var index = 1
+	filterStr, args, index1 := genFilterRoutingConfigSQL(filter, index)
+	index = index1
 	countStr := genQueryRoutingConfigCountSQL() + filterStr
 	var total uint32
 	err := rs.master.QueryRow(countStr, args...).Scan(&total)
@@ -233,8 +226,8 @@ func (rs *routingConfigStore) GetRoutingConfigs(filter map[string]string,
 	default:
 	}
 
-	str := genQueryRoutingConfigSQL() + filterStr + " order by routing_config.mtime desc limit ?, ?"
-	args = append(args, offset, limit)
+	str := genQueryRoutingConfigSQL() + filterStr + fmt.Sprintf(" order by routing_config.mtime desc limit $%d offset $%d", index, index+1)
+	args = append(args, limit, offset)
 	rows, err := rs.master.Query(str, args...)
 	if err != nil {
 		log.Errorf("[Store][database] get routing configs query err: %s", err.Error())
@@ -246,16 +239,12 @@ func (rs *routingConfigStore) GetRoutingConfigs(filter map[string]string,
 	for rows.Next() {
 		var tmp model.ExtendRoutingConfig
 		tmp.Config = &model.RoutingConfig{}
-		var ctime, mtime int64
 		err := rows.Scan(&tmp.ServiceName, &tmp.NamespaceName, &tmp.Config.ID,
-			&tmp.Config.InBounds, &tmp.Config.OutBounds, &ctime, &mtime)
+			&tmp.Config.InBounds, &tmp.Config.OutBounds, &tmp.Config.CreateTime, &tmp.Config.ModifyTime)
 		if err != nil {
 			log.Errorf("[Store][database] query routing configs rows scan err: %s", err.Error())
 			return 0, nil, err
 		}
-
-		tmp.Config.CreateTime = time.Unix(ctime, 0)
-		tmp.Config.ModifyTime = time.Unix(mtime, 0)
 
 		out = append(out, &tmp)
 	}
@@ -269,8 +258,11 @@ func (rs *routingConfigStore) GetRoutingConfigs(filter map[string]string,
 
 // cleanRoutingConfig 从数据库彻底清理路由配置
 func cleanRoutingConfig(tx *BaseTx, serviceID string) error {
-	str := `delete from routing_config where id = ? and flag = 1`
-	if _, err := tx.Exec(str, serviceID); err != nil {
+	stmt, err := tx.Prepare(`delete from routing_config where id = $1 and flag = 1`)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(serviceID); err != nil {
 		log.Errorf("[Store][database] clean routing config(%s) err: %s", serviceID, err.Error())
 		return err
 	}
@@ -285,16 +277,13 @@ func fetchRoutingConfigRows(rows *sql.Rows) ([]*model.RoutingConfig, error) {
 	for rows.Next() {
 		var entry model.RoutingConfig
 		var flag int
-		var ctime, mtime int64
 		err := rows.Scan(&entry.ID, &entry.InBounds, &entry.OutBounds, &entry.Revision,
-			&flag, &ctime, &mtime)
+			&flag, &entry.CreateTime, &entry.ModifyTime)
 		if err != nil {
 			log.Errorf("[database][store] fetch routing config scan err: %s", err.Error())
 			return nil, err
 		}
 
-		entry.CreateTime = time.Unix(ctime, 0)
-		entry.ModifyTime = time.Unix(mtime, 0)
 		entry.Valid = true
 		if flag == 1 {
 			entry.Valid = false
@@ -313,7 +302,7 @@ func fetchRoutingConfigRows(rows *sql.Rows) ([]*model.RoutingConfig, error) {
 // genQueryRoutingConfigSQL 查询路由配置的语句
 func genQueryRoutingConfigSQL() string {
 	str := `select name, namespace, routing_config.id, in_bounds, out_bounds,
-			unix_timestamp(routing_config.ctime), unix_timestamp(routing_config.mtime)  
+			routing_config.ctime, routing_config.mtime  
 			from routing_config, service 
 			where routing_config.id = service.id 
 			and routing_config.flag = 0`
@@ -329,13 +318,14 @@ func genQueryRoutingConfigCountSQL() string {
 }
 
 // genFilterRoutingConfigSQL 生成过滤语句
-func genFilterRoutingConfigSQL(filters map[string]string) (string, []interface{}) {
+func genFilterRoutingConfigSQL(filters map[string]string, index int) (string, []interface{}, int) {
 	str := ""
 	args := make([]interface{}, 0, len(filters))
 	for key, value := range filters {
-		str += fmt.Sprintf(" and %s = ? ", key)
+		str += fmt.Sprintf(" and %s = $%d ", key, index)
+		index++
 		args = append(args, value)
 	}
 
-	return str, args
+	return str, args, index
 }

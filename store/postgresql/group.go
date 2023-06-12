@@ -1,32 +1,14 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"fmt"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
 	"go.uber.org/zap"
+	"time"
 )
 
 const (
@@ -85,10 +67,13 @@ func (u *groupStore) addGroup(group *model.UserGroupDetail) error {
 
 	addSql := `
 	  INSERT INTO user_group (id, name, owner, token, token_enable, comment, flag, ctime, mtime)
-	  VALUES (?, ?, ?, ?, ?, ?, ?, sysdate(), sysdate())
+	  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	  `
-
-	if _, err = tx.Exec(addSql, []interface{}{
+	stmt, err := tx.Prepare(addSql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
 		group.ID,
 		group.Name,
 		group.Owner,
@@ -96,6 +81,8 @@ func (u *groupStore) addGroup(group *model.UserGroupDetail) error {
 		1,
 		group.Comment,
 		0,
+		GetCurrentTimeFormat(),
+		GetCurrentTimeFormat(),
 	}...); err != nil {
 		log.Errorf("[Store][Group] add usergroup err: %s", err.Error())
 		return err
@@ -160,12 +147,17 @@ func (u *groupStore) updateGroup(group *model.ModifyUserGroup) error {
 		}
 	}
 
-	modifySql := "UPDATE user_group SET token = ?, comment = ?, token_enable = ?, mtime = sysdate() " +
-		" WHERE id = ? AND flag = 0"
-	if _, err = tx.Exec(modifySql, []interface{}{
+	modifySql := "UPDATE user_group SET token = $1, comment = $2, token_enable = $3, mtime = $4 " +
+		" WHERE id = $5 AND flag = 0"
+	stmt, err := tx.Prepare(modifySql)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
 		group.Token,
 		group.Comment,
 		tokenEnable,
+		GetCurrentTimeFormat(),
 		group.ID,
 	}...); err != nil {
 		log.Errorf("[Store][Group] update usergroup main err: %s", err.Error())
@@ -202,14 +194,23 @@ func (u *groupStore) deleteUserGroup(group *model.UserGroupDetail) error {
 
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.Exec("DELETE FROM user_group_relation WHERE group_id = ?", []interface{}{
+	stmt, err := tx.Prepare("DELETE FROM user_group_relation WHERE group_id = $1")
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
 		group.ID,
 	}...); err != nil {
 		log.Errorf("[Store][Group] clean usergroup relation err: %s", err.Error())
 		return err
 	}
 
-	if _, err = tx.Exec("UPDATE user_group SET flag = 1, mtime = sysdate() WHERE id = ?", []interface{}{
+	stmt, err = tx.Prepare("UPDATE user_group SET flag = 1, mtime = $1 WHERE id = $2")
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec([]interface{}{
+		GetCurrentTimeFormat(),
 		group.ID,
 	}...); err != nil {
 		log.Errorf("[Store][Group] remove usergroup err: %s", err.Error())
@@ -236,11 +237,10 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 	}
 
 	getSql := `
-	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable
-		  , UNIX_TIMESTAMP(ug.ctime), UNIX_TIMESTAMP(ug.mtime)
+	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, ug.mtime
 	  FROM user_group ug
 	  WHERE ug.flag = 0
-		  AND ug.id = ? 
+		  AND ug.id = $1 
 	  `
 	row := u.master.QueryRow(getSql, groupId)
 
@@ -248,12 +248,11 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 		UserGroup: &model.UserGroup{},
 	}
 	var (
-		ctime, mtime int64
-		tokenEnable  int
+		tokenEnable int
 	)
 
-	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token, &tokenEnable,
-		&ctime, &mtime); err != nil {
+	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
+		&tokenEnable, &group.CreateTime, &group.ModifyTime); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return nil, nil
@@ -268,8 +267,6 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 
 	group.UserIds = uids
 	group.TokenEnable = tokenEnable == 1
-	group.CreateTime = time.Unix(ctime, 0)
-	group.ModifyTime = time.Unix(mtime, 0)
 
 	return group, nil
 }
@@ -281,21 +278,19 @@ func (u *groupStore) GetGroupByName(name, owner string) (*model.UserGroup, error
 			"get usergroup missing some params, name=%s, owner=%s", name, owner))
 	}
 
-	var ctime, mtime int64
-
 	getSql := `
-	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token
-		  , UNIX_TIMESTAMP(ug.ctime), UNIX_TIMESTAMP(ug.mtime)
+	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.ctime, ug.mtime
 	  FROM user_group ug
 	  WHERE ug.flag = 0
-		  AND ug.name = ?
-		  AND ug.owner = ? 
+		  AND ug.name = $1
+		  AND ug.owner = $2 
 	  `
 	row := u.master.QueryRow(getSql, name, owner)
 
 	group := new(model.UserGroup)
 
-	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token, &ctime, &mtime); err != nil {
+	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
+		&group.CreateTime, &group.ModifyTime); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return nil, nil
@@ -303,9 +298,6 @@ func (u *groupStore) GetGroupByName(name, owner string) (*model.UserGroup, error
 			return nil, store.Error(err)
 		}
 	}
-
-	group.CreateTime = time.Unix(ctime, 0)
-	group.ModifyTime = time.Unix(mtime, 0)
 
 	return group, nil
 }
@@ -338,13 +330,13 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 	countSql := "SELECT COUNT(*) FROM user_group ug WHERE ug.flag = 0 "
 	getSql := `
 	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable
-		  , UNIX_TIMESTAMP(ug.ctime), UNIX_TIMESTAMP(ug.mtime)
-		  , ug.flag
+		  , ug.ctime, ug.mtime, ug.flag
 	  FROM user_group ug
 	  WHERE ug.flag = 0 
 	  `
 
 	args := make([]interface{}, 0)
+	idx := 1
 
 	if len(filters) != 0 {
 		for k, v := range filters {
@@ -354,14 +346,15 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 				k = newK
 			}
 			if utils.IsPrefixWildName(v) {
-				getSql += (" " + k + " like ? ")
-				countSql += (" " + k + " like ? ")
+				getSql += fmt.Sprintf(" "+k+" like $%d ", idx)
+				countSql += fmt.Sprintf(" "+k+" like $%d ", idx)
 				args = append(args, "%"+v[:len(v)-1]+"%")
 			} else {
-				getSql += (" " + k + " = ? ")
-				countSql += (" " + k + " = ? ")
+				getSql += " " + k + fmt.Sprintf(" = $%d ", idx)
+				countSql += " " + k + fmt.Sprintf(" = $%d ", idx)
 				args = append(args, v)
 			}
+			idx++
 		}
 	}
 
@@ -370,8 +363,8 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 		return 0, nil, err
 	}
 
-	getSql += " ORDER BY ug.mtime LIMIT ? , ?"
-	args = append(args, offset, limit)
+	getSql += fmt.Sprintf(" ORDER BY ug.mtime LIMIT $%d OFFSET $%d", idx, idx+1)
+	args = append(args, limit, offset)
 
 	groups, err := u.collectGroupsFromRows(u.master.Query, getSql, args)
 	if err != nil {
@@ -386,11 +379,12 @@ func (u *groupStore) listGroupByUser(filters map[string]string, offset uint32, l
 	[]*model.UserGroup, error) {
 	countSql := "SELECT COUNT(*) FROM user_group_relation ul LEFT JOIN user_group ug ON " +
 		" ul.group_id = ug.id WHERE ug.flag = 0 "
-	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, UNIX_TIMESTAMP(ug.ctime), " +
-		" UNIX_TIMESTAMP(ug.mtime), ug.flag " +
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, " +
+		" ug.mtime, ug.flag " +
 		" FROM user_group_relation ul LEFT JOIN user_group ug ON ul.group_id = ug.id WHERE ug.flag = 0 "
 
 	args := make([]interface{}, 0)
+	idx := 1
 
 	if len(filters) != 0 {
 		for k, v := range filters {
@@ -400,18 +394,20 @@ func (u *groupStore) listGroupByUser(filters map[string]string, offset uint32, l
 				k = newK
 			}
 			if utils.IsPrefixWildName(v) {
-				getSql += (" " + k + " like ? ")
-				countSql += (" " + k + " like ? ")
+				getSql += " " + k + fmt.Sprintf(" like $%d ", idx)
+				countSql += " " + k + fmt.Sprintf(" like $%d ", idx)
 				args = append(args, "%"+v[:len(v)-1]+"%")
 			} else if k == "ug.owner" {
-				getSql += " (ug.owner = ? OR ul.user_id = ? ) "
-				countSql += " (ug.owner = ? OR ul.user_id = ? ) "
+				getSql += fmt.Sprintf(" (ug.owner = $%d OR ul.user_id = $%d ) ", idx, idx+1)
+				countSql += fmt.Sprintf(" (ug.owner = $%d OR ul.user_id = $%d ) ", idx, idx+1)
+				idx += 1
 				args = append(args, v, v)
 			} else {
-				getSql += (" " + k + " = ? ")
-				countSql += (" " + k + " = ? ")
+				getSql += " " + k + fmt.Sprintf(" = $%d ", idx)
+				countSql += fmt.Sprintf(" "+k+" = $%d ", idx)
 				args = append(args, v)
 			}
+			idx++
 		}
 	}
 
@@ -420,8 +416,8 @@ func (u *groupStore) listGroupByUser(filters map[string]string, offset uint32, l
 		return 0, nil, err
 	}
 
-	getSql += " GROUP BY ug.id ORDER BY ug.mtime LIMIT ? , ?"
-	args = append(args, offset, limit)
+	getSql += fmt.Sprintf(" GROUP BY ug.id ORDER BY ug.mtime LIMIT $%d OFFSET $%d", idx, idx+1)
+	args = append(args, limit, offset)
 
 	groups, err := u.collectGroupsFromRows(u.master.Query, getSql, args)
 	if err != nil {
@@ -464,11 +460,11 @@ func (u *groupStore) GetGroupsForCache(mtime time.Time, firstUpdate bool) ([]*mo
 	defer func() { _ = tx.Commit() }()
 
 	args := make([]interface{}, 0)
-	querySql := "SELECT id, name, owner, comment, token, token_enable, UNIX_TIMESTAMP(ctime), UNIX_TIMESTAMP(mtime), " +
+	querySql := "SELECT id, name, owner, comment, token, token_enable, ctime, mtime, " +
 		" flag FROM user_group "
 	if !firstUpdate {
-		querySql += " WHERE mtime >= FROM_UNIXTIME(?)"
-		args = append(args, timeToTimestamp(mtime))
+		querySql += " WHERE mtime >= $1"
+		args = append(args, mtime)
 	}
 
 	rows, err := tx.Query(querySql, args...)
@@ -512,9 +508,13 @@ func (u *groupStore) addGroupRelation(tx *BaseTx, groupId string, userIds []stri
 
 	for i := range userIds {
 		uid := userIds[i]
-		addSql := "INSERT INTO user_group_relation (group_id, user_id) VALUE (?,?)"
+		addSql := "INSERT INTO user_group_relation (group_id, user_id) VALUE ($1,$2)"
 		args := []interface{}{groupId, uid}
-		_, err := tx.Exec(addSql, args...)
+		stmt, err := tx.Prepare(addSql)
+		if err != nil {
+			return err
+		}
+		_, err = stmt.Exec(args...)
 		if err != nil {
 			err = store.Error(err)
 			// 之前的用户已经存在，直接忽略
@@ -539,9 +539,13 @@ func (u *groupStore) removeGroupRelation(tx *BaseTx, groupId string, userIds []s
 
 	for i := range userIds {
 		uid := userIds[i]
-		addSql := "DELETE FROM user_group_relation WHERE group_id = ? AND user_id = ?"
+		addSql := "DELETE FROM user_group_relation WHERE group_id = $1 AND user_id = $2"
 		args := []interface{}{groupId, uid}
-		if _, err := tx.Exec(addSql, args...); err != nil {
+		stmt, err := tx.Prepare(addSql)
+		if err != nil {
+			return err
+		}
+		if _, err := stmt.Exec(args...); err != nil {
 			return err
 		}
 	}
@@ -555,7 +559,7 @@ func (u *groupStore) getGroupLinkUserIds(groupId string) (map[string]struct{}, e
 
 	// 拉取该分组下的所有 user
 	idRows, err := u.slave.Query("SELECT user_id FROM user u JOIN user_group_relation ug ON "+
-		" u.id = ug.user_id WHERE ug.group_id = ?", groupId)
+		" u.id = ug.user_id WHERE ug.group_id = $1", groupId)
 	if err != nil {
 		return nil, err
 	}
@@ -572,18 +576,15 @@ func (u *groupStore) getGroupLinkUserIds(groupId string) (map[string]struct{}, e
 }
 
 func fetchRown2UserGroup(rows *sql.Rows) (*model.UserGroup, error) {
-	var ctime, mtime int64
 	var flag, tokenEnable int
 	group := new(model.UserGroup)
-	if err := rows.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token, &tokenEnable,
-		&ctime, &mtime, &flag); err != nil {
+	if err := rows.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
+		&tokenEnable, &group.CreateTime, &group.ModifyTime, &flag); err != nil {
 		return nil, err
 	}
 
 	group.Valid = flag == 0
 	group.TokenEnable = tokenEnable == 1
-	group.CreateTime = time.Unix(ctime, 0)
-	group.ModifyTime = time.Unix(mtime, 0)
 
 	return group, nil
 }
@@ -592,8 +593,12 @@ func fetchRown2UserGroup(rows *sql.Rows) (*model.UserGroup, error) {
 func cleanInValidGroup(tx *BaseTx, name, owner string) error {
 	log.Infof("[Store][User] clean usergroup(%s)", name)
 
-	str := "delete from user_group where name = ? and flag = 1"
-	if _, err := tx.Exec(str, name); err != nil {
+	str := "delete from user_group where name = $1 and flag = 1"
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(name); err != nil {
 		log.Errorf("[Store][User] clean usergroup(%s) err: %s", name, err.Error())
 		return err
 	}

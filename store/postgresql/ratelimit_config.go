@@ -1,33 +1,15 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
+	"strconv"
+	"strings"
+	"time"
 )
 
 var _ store.RateLimitStore = (*rateLimitStore)(nil)
@@ -74,9 +56,13 @@ func (rls *rateLimitStore) createRateLimit(limit *model.RateLimit) error {
 	// 新建限流规则
 	str := fmt.Sprintf(`insert into ratelimit_config(
 			id, name, disable, service_id, method, labels, priority, rule, revision, ctime, mtime, etime)
-			values(?,?,?,?,?,?,?,?,?,sysdate(),sysdate(), %s)`, etimeStr)
-	if _, err := tx.Exec(str, limit.ID, limit.Name, limit.Disable, limit.ServiceID, limit.Method, limit.Labels,
-		limit.Priority, limit.Rule, limit.Revision); err != nil {
+			values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, %s)`, etimeStr)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(limit.ID, limit.Name, limit.Disable, limit.ServiceID, limit.Method, limit.Labels,
+		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 		log.Errorf("[Store][database] create rate limit(%+v), sql %s err: %s", limit, str, err.Error())
 		return err
 	}
@@ -129,8 +115,12 @@ func (rls *rateLimitStore) enableRateLimit(limit *model.RateLimit) error {
 
 	etimeStr := limitToEtimeStr(limit)
 	str := fmt.Sprintf(
-		`update ratelimit_config set disable = ?, revision = ?, mtime = sysdate(), etime=%s where id = ?`, etimeStr)
-	if _, err := tx.Exec(str, limit.Disable, limit.Revision, limit.ID); err != nil {
+		`update ratelimit_config set disable = $1, revision = $2, mtime = $3, etime=%s where id = $4`, etimeStr)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(limit.Disable, limit.Revision, GetCurrentTimeFormat(), limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -155,10 +145,14 @@ func (rls *rateLimitStore) updateRateLimit(limit *model.RateLimit) error {
 	}()
 
 	etimeStr := limitToEtimeStr(limit)
-	str := fmt.Sprintf(`update ratelimit_config set name = ?, service_id=?, disable = ?, method= ?,
-			labels = ?, priority = ?, rule = ?, revision = ?, mtime = sysdate(), etime=%s where id = ?`, etimeStr)
-	if _, err := tx.Exec(str, limit.Name, limit.ServiceID, limit.Disable,
-		limit.Method, limit.Labels, limit.Priority, limit.Rule, limit.Revision, limit.ID); err != nil {
+	str := fmt.Sprintf(`update ratelimit_config set name = $1, service_id = $2, disable = $3, method= $4,
+			labels = $5, priority = $6, rule = $7, revision = $8, mtime = $9, etime=%s where id = $10`, etimeStr)
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(limit.Name, limit.ServiceID, limit.Disable, limit.Method, limit.Labels,
+		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -195,8 +189,12 @@ func (rls *rateLimitStore) deleteRateLimit(limit *model.RateLimit) error {
 		_ = tx.Rollback()
 	}()
 
-	str := `update ratelimit_config set flag = 1, mtime = sysdate() where id = ?`
-	if _, err := tx.Exec(str, limit.ID); err != nil {
+	str := `update ratelimit_config set flag = 1, mtime = $1 where id = $2`
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		return err
+	}
+	if _, err = stmt.Exec(GetCurrentTimeFormat(), limit.ID); err != nil {
 		log.Errorf("[Store][database] delete rate limit(%+v) err: %s", limit, err)
 		return err
 	}
@@ -215,9 +213,9 @@ func (rls *rateLimitStore) GetRateLimitWithID(id string) (*model.RateLimit, erro
 		return nil, errors.New("get rate limit missing some params")
 	}
 
-	str := `select id, name, disable, service_id, method, labels, priority, rule, revision, flag,
-			unix_timestamp(ctime), unix_timestamp(mtime), unix_timestamp(etime)
-			from ratelimit_config where id = ? and flag = 0`
+	str := `select id, name, disable, service_id, method, labels, priority, rule, 
+       		revision, flag, ctime, mtime, etime
+			from ratelimit_config where id = $1 and flag = 0`
 	rows, err := rls.master.Query(str, id)
 	if err != nil {
 		log.Errorf("[Store][database] query rate limit with id(%s) err: %s", id, err.Error())
@@ -240,16 +238,13 @@ func fetchRateLimitRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 	for rows.Next() {
 		var rateLimit model.RateLimit
 		var flag int
-		var ctime, mtime, etime int64
-		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &rateLimit.Disable, &rateLimit.ServiceID, &rateLimit.Method,
-			&rateLimit.Labels, &rateLimit.Priority, &rateLimit.Rule, &rateLimit.Revision, &flag, &ctime, &mtime, &etime)
+		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &rateLimit.Disable, &rateLimit.ServiceID,
+			&rateLimit.Method, &rateLimit.Labels, &rateLimit.Priority, &rateLimit.Rule,
+			&rateLimit.Revision, &flag, &rateLimit.CreateTime, &rateLimit.ModifyTime, &rateLimit.EnableTime)
 		if err != nil {
 			log.Errorf("[Store][database] fetch rate limit scan err: %s", err.Error())
 			return nil, err
 		}
-		rateLimit.CreateTime = time.Unix(ctime, 0)
-		rateLimit.ModifyTime = time.Unix(mtime, 0)
-		rateLimit.EnableTime = time.Unix(etime, 0)
 		rateLimit.Valid = true
 		if flag == 1 {
 			rateLimit.Valid = false
@@ -267,13 +262,13 @@ func fetchRateLimitRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 func (rls *rateLimitStore) GetRateLimitsForCache(mtime time.Time,
 	firstUpdate bool) ([]*model.RateLimit, error) {
 	str := `select id, name, disable, ratelimit_config.service_id, method, labels, priority, rule, revision, flag,
-			unix_timestamp(ratelimit_config.ctime), unix_timestamp(ratelimit_config.mtime), 
-			unix_timestamp(ratelimit_config.etime) from ratelimit_config 
-			where ratelimit_config.mtime > FROM_UNIXTIME(?)`
+			ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime 
+			from ratelimit_config 
+			where ratelimit_config.mtime > $1`
 	if firstUpdate {
 		str += " and flag != 1"
 	}
-	rows, err := rls.slave.Query(str, timeToTimestamp(mtime))
+	rows, err := rls.slave.Query(str, mtime)
 	if err != nil {
 		log.Errorf("[Store][database] query rate limits with mtime err: %s", err.Error())
 		return nil, err
@@ -293,19 +288,17 @@ func fetchRateLimitCacheRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 
 	for rows.Next() {
 		var (
-			rateLimit           model.RateLimit
-			ctime, mtime, etime int64
-			serviceID           string
-			flag                int
+			rateLimit model.RateLimit
+			serviceID string
+			flag      int
 		)
-		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &rateLimit.Disable, &serviceID, &rateLimit.Method, &rateLimit.Labels,
-			&rateLimit.Priority, &rateLimit.Rule, &rateLimit.Revision, &flag, &ctime, &mtime, &etime)
+		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &rateLimit.Disable, &serviceID, &rateLimit.Method,
+			&rateLimit.Labels, &rateLimit.Priority, &rateLimit.Rule, &rateLimit.Revision, &flag,
+			&rateLimit.CreateTime, &rateLimit.ModifyTime, &rateLimit.EnableTime)
 		if err != nil {
 			log.Errorf("[Store][database] fetch rate limit cache scan err: %s", err.Error())
 			return nil, err
 		}
-		rateLimit.CreateTime = time.Unix(ctime, 0)
-		rateLimit.ModifyTime = time.Unix(mtime, 0)
 		rateLimit.Valid = true
 		if flag == 1 {
 			rateLimit.Valid = false
@@ -350,13 +343,15 @@ func (rls *rateLimitStore) GetExtendRateLimits(
 func (rls *rateLimitStore) getBriefRateLimits(
 	filter map[string]string, offset uint32, limit uint32) ([]*model.ExtendRateLimit, error) {
 	str := `select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable,
-            ratelimit_config.service_id, ratelimit_config.method, unix_timestamp(ratelimit_config.ctime), 
-			unix_timestamp(ratelimit_config.mtime), unix_timestamp(ratelimit_config.etime) 
+            ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.ctime, 
+			ratelimit_config.mtime, ratelimit_config.etime 
 			from ratelimit_config where ratelimit_config.flag = 0`
 
-	queryStr, args := genFilterRateLimitSQL(filter)
-	args = append(args, offset, limit)
-	str = str + queryStr + ` order by ratelimit_config.mtime desc limit ?, ?`
+	var index = 1
+	queryStr, args, index1 := genFilterRateLimitSQL(filter, index)
+	index = index1
+	args = append(args, limit, offset)
+	str = str + queryStr + fmt.Sprintf(` order by ratelimit_config.mtime desc limit $%d offset $%d`, index, index+1)
 
 	rows, err := rls.master.Query(str, args...)
 	if err != nil {
@@ -377,20 +372,19 @@ func fetchBriefRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) {
 	for rows.Next() {
 		var expand model.ExtendRateLimit
 		expand.RateLimit = &model.RateLimit{}
-		var ctime, mtime, etime int64
 		err := rows.Scan(
 			&expand.RateLimit.ID,
 			&expand.RateLimit.Name,
 			&expand.RateLimit.Disable,
 			&expand.RateLimit.ServiceID,
-			&expand.RateLimit.Method, &ctime, &mtime, &etime)
+			&expand.RateLimit.Method,
+			&expand.RateLimit.CreateTime,
+			&expand.RateLimit.ModifyTime,
+			&expand.RateLimit.EnableTime)
 		if err != nil {
 			log.Errorf("[Store][database] fetch brief rate limit scan err: %s", err.Error())
 			return nil, err
 		}
-		expand.RateLimit.CreateTime = time.Unix(ctime, 0)
-		expand.RateLimit.ModifyTime = time.Unix(mtime, 0)
-		expand.RateLimit.EnableTime = time.Unix(etime, 0)
 		out = append(out, &expand)
 	}
 	if err := rows.Err(); err != nil {
@@ -406,14 +400,15 @@ func (rls *rateLimitStore) getExpandRateLimits(
 	str := `select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable,
             ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.labels, 
             ratelimit_config.priority, ratelimit_config.rule, ratelimit_config.revision, 
-            unix_timestamp(ratelimit_config.ctime), unix_timestamp(ratelimit_config.mtime), 
-			unix_timestamp(ratelimit_config.etime) 
+            ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime 
 			from ratelimit_config 
 			where ratelimit_config.flag = 0`
 
-	queryStr, args := genFilterRateLimitSQL(filter)
-	args = append(args, offset, limit)
-	str = str + queryStr + ` order by ratelimit_config.mtime desc limit ?, ?`
+	var index = 1
+	queryStr, args, index1 := genFilterRateLimitSQL(filter, index)
+	index = index1
+	args = append(args, limit, offset)
+	str = str + queryStr + fmt.Sprintf(` order by ratelimit_config.mtime desc limit $%d offset $%d`, index, index+1)
 
 	rows, err := rls.master.Query(str, args...)
 	if err != nil {
@@ -434,7 +429,6 @@ func fetchExpandRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) 
 	for rows.Next() {
 		var expand model.ExtendRateLimit
 		expand.RateLimit = &model.RateLimit{}
-		var ctime, mtime, etime int64
 		err := rows.Scan(
 			&expand.RateLimit.ID,
 			&expand.RateLimit.Name,
@@ -444,14 +438,14 @@ func fetchExpandRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) 
 			&expand.RateLimit.Labels,
 			&expand.RateLimit.Priority,
 			&expand.RateLimit.Rule,
-			&expand.RateLimit.Revision, &ctime, &mtime, &etime)
+			&expand.RateLimit.Revision,
+			&expand.RateLimit.CreateTime,
+			&expand.RateLimit.ModifyTime,
+			&expand.RateLimit.EnableTime)
 		if err != nil {
 			log.Errorf("[Store][database] fetch expand rate limit scan err: %s", err.Error())
 			return nil, err
 		}
-		expand.RateLimit.CreateTime = time.Unix(ctime, 0)
-		expand.RateLimit.ModifyTime = time.Unix(mtime, 0)
-		expand.RateLimit.EnableTime = time.Unix(etime, 0)
 		out = append(out, &expand)
 	}
 	if err := rows.Err(); err != nil {
@@ -465,7 +459,7 @@ func fetchExpandRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) 
 func (rls *rateLimitStore) getExpandRateLimitsCount(filter map[string]string) (uint32, error) {
 	str := `select count(*) from ratelimit_config where ratelimit_config.flag = 0`
 
-	queryStr, args := genFilterRateLimitSQL(filter)
+	queryStr, args, _ := genFilterRateLimitSQL(filter, 1)
 	str = str + queryStr
 	var total uint32
 	err := rls.master.QueryRow(str, args...).Scan(&total)
@@ -489,7 +483,7 @@ var queryKeyToDbColumn = map[string]string{
 }
 
 // genFilterRateLimitSQL 生成查询语句的过滤语句
-func genFilterRateLimitSQL(query map[string]string) (string, []interface{}) {
+func genFilterRateLimitSQL(query map[string]string, index int) (string, []interface{}, int) {
 	str := ""
 	args := make([]interface{}, 0, len(query))
 	for key, value := range query {
@@ -499,16 +493,17 @@ func genFilterRateLimitSQL(query map[string]string) (string, []interface{}) {
 			continue
 		}
 		if key == "name" || key == "method" || key == "labels" {
-			str += fmt.Sprintf(" and %s like ?", sqlKey)
+			str += fmt.Sprintf(" and %s like $%d", sqlKey, index)
 			arg = "%" + value + "%"
 		} else if key == "disable" {
-			str += fmt.Sprintf(" and %s = ?", sqlKey)
+			str += fmt.Sprintf(" and %s = $%d", sqlKey, index)
 			arg, _ = strconv.ParseBool(value)
 		} else {
-			str += fmt.Sprintf(" and %s = ?", sqlKey)
+			str += fmt.Sprintf(" and %s = $%d", sqlKey, index)
 			arg = value
 		}
+		index++
 		args = append(args, arg)
 	}
-	return str, args
+	return str, args, index
 }

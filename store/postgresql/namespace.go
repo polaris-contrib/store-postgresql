@@ -1,31 +1,13 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
+	"time"
 )
 
 // namespaceStore 实现了NamespaceStore
@@ -47,14 +29,19 @@ func (ns *namespaceStore) AddNamespace(namespace *model.Namespace) error {
 				return err
 			}
 
-			str := fmt.Sprintf("insert into namespace(name, comment, token, owner, ctime, mtime) values('%s', '%s', '%s', '%s', '%s', '%s')",
-				namespace.Name, namespace.Comment, namespace.Token, namespace.Owner, GetCurrentTimeFormat(), GetCurrentTimeFormat())
-			if _, err := tx.Exec(str); err != nil {
+			str := fmt.Sprintf("insert into namespace(name, comment, token, owner, ctime, mtime) values($1, $2, $3, $4, $5, $6)")
+			stmt, err := tx.Prepare(str)
+			if err != nil {
+				log.Errorf("[Store][database] insert prepare[%v] commit tx err: %s", namespace, err.Error())
+				return store.Error(err)
+			}
+
+			if _, err := stmt.Exec(namespace.Name, namespace.Comment, namespace.Token, namespace.Owner, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 				return store.Error(err)
 			}
 
 			if err := tx.Commit(); err != nil {
-				log.Errorf("[Store][database] batch delete instance commit tx err: %s", err.Error())
+				log.Errorf("[Store][database] batch insert instance commit tx err: %s", err.Error())
 				return err
 			}
 
@@ -71,9 +58,12 @@ func (ns *namespaceStore) UpdateNamespace(namespace *model.Namespace) error {
 
 	return RetryTransaction("updateNamespace", func() error {
 		return ns.master.processWithTransaction("updateNamespace", func(tx *BaseTx) error {
-			str := fmt.Sprintf("update namespace set owner = '%s', comment = '%s', mtime = '%s' where name = '%s'",
-				namespace.Owner, namespace.Comment, GetCurrentTimeFormat(), namespace.Name)
-			if _, err := tx.Exec(str); err != nil {
+			stmt, err := tx.Prepare("update namespace set owner = $1, comment = $2, mtime = $3 where name = $4")
+			if err != nil {
+				return store.Error(err)
+			}
+
+			if _, err := stmt.Exec(namespace.Owner, namespace.Comment, GetCurrentTimeFormat(), namespace.Name); err != nil {
 				return store.Error(err)
 			}
 
@@ -94,9 +84,11 @@ func (ns *namespaceStore) UpdateNamespaceToken(name string, token string) error 
 	}
 	return RetryTransaction("updateNamespaceToken", func() error {
 		return ns.master.processWithTransaction("updateNamespaceToken", func(tx *BaseTx) error {
-			str := fmt.Sprintf("update namespace set token = '%s', mtime = '%s' where name = '%s'",
-				token, GetCurrentTimeFormat(), name)
-			if _, err := tx.Exec(str, token, name); err != nil {
+			/*str := fmt.Sprintf("update namespace set token = '%s', mtime = '%s' where name = '%s'",
+			token, GetCurrentTimeFormat(), name)*/
+
+			str := "update namespace set token = $1, mtime = $2 where name = $3"
+			if _, err := tx.Exec(str, token, GetCurrentTimeFormat(), name); err != nil {
 				return store.Error(err)
 			}
 
@@ -112,7 +104,7 @@ func (ns *namespaceStore) UpdateNamespaceToken(name string, token string) error 
 
 // GetNamespace 根据名字获取命名空间详情，只返回有效的
 func (ns *namespaceStore) GetNamespace(name string) (*model.Namespace, error) {
-	namespace, err := ns.GetNamespace(name)
+	namespace, err := ns.getNamespace(name)
 	if err != nil {
 		return nil, err
 	}
@@ -144,8 +136,8 @@ func (ns *namespaceStore) GetNamespaces(filter map[string][]string, offset, limi
 
 // GetMoreNamespaces 根据mtime获取命名空间
 func (ns *namespaceStore) GetMoreNamespaces(mtime time.Time) ([]*model.Namespace, error) {
-	str := genNamespaceSelectSQL() + " where mtime >= FROM_UNIXTIME(?)"
-	rows, err := ns.slave.Query(str, timeToTimestamp(mtime))
+	str := genNamespaceSelectSQL() + " where mtime >= $1"
+	rows, err := ns.slave.Query(str, mtime)
 	if err != nil {
 		log.Errorf("[Store][database] get more namespace query err: %s", err.Error())
 		return nil, err
@@ -195,7 +187,7 @@ func (ns *namespaceStore) getNamespace(name string) (*model.Namespace, error) {
 		return nil, errors.New("store get namespace name is empty")
 	}
 
-	str := genNamespaceSelectSQL() + fmt.Sprintf(" where name = '%s'", name)
+	str := genNamespaceSelectSQL() + " where name = $1"
 	rows, err := ns.master.Query(str, name)
 	if err != nil {
 		log.Errorf("[Store][database] get namespace query err: %s", err.Error())
@@ -222,9 +214,8 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 	defer rows.Close()
 
 	var (
-		out          []*model.Namespace
-		ctime, mtime int64
-		flag         int
+		out  []*model.Namespace
+		flag int
 	)
 
 	for rows.Next() {
@@ -235,15 +226,13 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 			&space.Token,
 			&space.Owner,
 			&flag,
-			&ctime,
-			&mtime)
+			&space.CreateTime,
+			&space.ModifyTime)
 		if err != nil {
 			log.Errorf("[Store][database] fetch namespace rows scan err: %s", err.Error())
 			return nil, err
 		}
 
-		space.CreateTime = time.Unix(ctime, 0)
-		space.ModifyTime = time.Unix(mtime, 0)
 		space.Valid = true
 		if flag == 1 {
 			space.Valid = false
@@ -259,23 +248,6 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 	return out, nil
 }
 
-// rlockNamespace rlock namespace
-func rlockNamespace(queryRow func(query string, args ...interface{}) *sql.Row, namespace string) (
-	string, error) {
-	str := "select name from namespace where name = ? and flag != 1 lock in share mode"
-
-	var name string
-	err := queryRow(str, namespace).Scan(&name)
-	switch {
-	case err == sql.ErrNoRows:
-		return "", nil
-	case err != nil:
-		return "", err
-	default:
-		return name, nil
-	}
-}
-
 // genNamespaceSelectSQL 生成namespace的查询语句
 func genNamespaceSelectSQL() string {
 	str := `select name, comment, token, owner, flag, ctime, mtime 
@@ -285,12 +257,17 @@ func genNamespaceSelectSQL() string {
 
 // cleanNamespace clean真实的数据，只有flag=1的数据才可以清除
 func cleanNamespace(tx *BaseTx, name string) error {
-	str := fmt.Sprintf("delete from namespace where name = '%s' and flag = 1", name)
+	str := "delete from namespace where name = $1 and flag = 1"
+	stmt, err := tx.Prepare(str)
+	if err != nil {
+		log.Errorf("[Store][database] clean Prepare namespace(%s) err: %s", name, err.Error())
+		return err
+	}
 
 	// 必须打印日志说明
 	log.Infof("[Store][database] clean namespace(%s)", name)
 
-	if _, err := tx.Exec(str); err != nil {
+	if _, err := stmt.Exec(name); err != nil {
 		log.Infof("[Store][database] clean namespace(%s) err: %s", name, err.Error())
 		return err
 	}

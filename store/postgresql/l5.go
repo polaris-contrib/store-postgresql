@@ -1,29 +1,11 @@
-/**
- * Tencent is pleased to support the open source community by making Polaris available.
- *
- * Copyright (C) 2019 THL A29 Limited, a Tencent company. All rights reserved.
- *
- * Licensed under the BSD 3-Clause License (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * https://opensource.org/licenses/BSD-3-Clause
- *
- * Unless required by applicable law or agreed to in writing, software distributed
- * under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR
- * CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
- */
-
 package postgresql
 
 import (
 	"database/sql"
 	"fmt"
-	"time"
-
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
+	"time"
 )
 
 // l5Store 实现了L5Store
@@ -64,9 +46,9 @@ func (l5 *l5Store) genNextL5Sid(layoutID uint32) (string, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	getStr := "select module_id, interface_id, range_num from cl5_module limit 0, 1 for update"
+	getStr := "select module_id, interface_id, range_num from cl5_module limit 1 offset 0"
 	var mid, iid, rnum uint32
-	if err := tx.QueryRow(getStr).Scan(&mid, &iid, &rnum); err != nil {
+	if err = tx.QueryRow(getStr).Scan(&mid, &iid, &rnum); err != nil {
 		log.Errorf("[Store][database] get next l5 sid err: %s", err.Error())
 		return "", err
 	}
@@ -81,13 +63,17 @@ func (l5 *l5Store) genNextL5Sid(layoutID uint32) (string, error) {
 		mid++
 	}
 
-	updateStr := "update cl5_module set module_id = ?, interface_id = ?, range_num = ?"
-	if _, err := tx.Exec(updateStr, mid, iid, rnum); err != nil {
+	updateStr := "update cl5_module set module_id = $1, interface_id = $2, range_num = $3"
+	stmt, err := tx.Prepare(updateStr)
+	if err != nil {
+		return "", err
+	}
+	if _, err = stmt.Exec(mid, iid, rnum); err != nil {
 		log.Errorf("[Store][database] get next l5 sid, update module err: %s", err.Error())
 		return "", err
 	}
 	// 更新完数据库之后，可以直接提交tx
-	if err := tx.Commit(); err != nil {
+	if err = tx.Commit(); err != nil {
 		log.Errorf("[Store][database] get next l5 sid tx commit err: %s", err.Error())
 		return "", err
 	}
@@ -105,7 +91,7 @@ func (l5 *l5Store) GetMoreL5Extend(mtime time.Time) (map[string]map[string]inter
 
 // GetMoreL5Routes 获取更多的L5 Route信息
 func (l5 *l5Store) GetMoreL5Routes(flow uint32) ([]*model.Route, error) {
-	str := getL5RouteSelectSQL() + " where Fflow > ?"
+	str := getL5RouteSelectSQL() + " where Fflow > $1"
 	rows, err := l5.slave.Query(str, flow)
 	if err != nil {
 		log.Errorf("[Store][database] get more l5 route query err: %s", err.Error())
@@ -117,7 +103,7 @@ func (l5 *l5Store) GetMoreL5Routes(flow uint32) ([]*model.Route, error) {
 
 // GetMoreL5Policies 获取更多的L5 Policy信息
 func (l5 *l5Store) GetMoreL5Policies(flow uint32) ([]*model.Policy, error) {
-	str := getL5PolicySelectSQL() + " where Fflow > ?"
+	str := getL5PolicySelectSQL() + " where Fflow > $1"
 	rows, err := l5.slave.Query(str, flow)
 	if err != nil {
 		log.Errorf("[Store][database] get more l5 policy query err: %s", err.Error())
@@ -129,7 +115,7 @@ func (l5 *l5Store) GetMoreL5Policies(flow uint32) ([]*model.Policy, error) {
 
 // GetMoreL5Sections 获取更多的L5 Section信息
 func (l5 *l5Store) GetMoreL5Sections(flow uint32) ([]*model.Section, error) {
-	str := getL5SectionSelectSQL() + " where Fflow > ?"
+	str := getL5SectionSelectSQL() + " where Fflow > $1"
 	rows, err := l5.slave.Query(str, flow)
 	if err != nil {
 		log.Errorf("[Store][database] get more l5 section query err: %s", err.Error())
@@ -141,7 +127,7 @@ func (l5 *l5Store) GetMoreL5Sections(flow uint32) ([]*model.Section, error) {
 
 // GetMoreL5IPConfigs 获取更多的L5 IPConfig信息
 func (l5 *l5Store) GetMoreL5IPConfigs(flow uint32) ([]*model.IPConfig, error) {
-	str := getL5IPConfigSelectSQL() + " where Fflow > ?"
+	str := getL5IPConfigSelectSQL() + " where Fflow > $1"
 	rows, err := l5.slave.Query(str, flow)
 	if err != nil {
 		log.Errorf("[Store][database] get more l5 ip config query err: %s", err.Error())
@@ -153,25 +139,25 @@ func (l5 *l5Store) GetMoreL5IPConfigs(flow uint32) ([]*model.IPConfig, error) {
 
 // getL5RouteSelectSQL 生成L5 Route的select sql语句
 func getL5RouteSelectSQL() string {
-	str := `select Fip, FmodId, FcmdId, FsetId, IFNULL(Fflag, 0), Fflow from t_route`
+	str := `select Fip, FmodId, FcmdId, FsetId, COALESCE(Fflag, 0), Fflow from t_route`
 	return str
 }
 
 // getL5PolicySelectSQL 生成L5 Policy的select sql语句
 func getL5PolicySelectSQL() string {
-	str := `select FmodId, Fdiv, Fmod, IFNULL(Fflag, 0), Fflow from t_policy`
+	str := `select FmodId, Fdiv, Fmod, COALESCE(Fflag, 0), Fflow from t_policy`
 	return str
 }
 
 // getL5SectionSelectSQL 生成L5 Section的select sql语句
 func getL5SectionSelectSQL() string {
-	str := `select FmodId, Ffrom, Fto, Fxid, IFNULL(Fflag, 0), Fflow from t_section`
+	str := `select FmodId, Ffrom, Fto, Fxid, COALESCE(Fflag, 0), Fflow from t_section`
 	return str
 }
 
 // getL5IPConfigSelectSQL 生成L5 IPConfig的select sql语句
 func getL5IPConfigSelectSQL() string {
-	str := `select Fip, FareaId, FcityId, FidcId, IFNULL(Fflag, 0), Fflow from t_ip_config`
+	str := `select Fip, FareaId, FcityId, FidcId, COALESCE(Fflag, 0), Fflow from t_ip_config`
 	return str
 }
 
