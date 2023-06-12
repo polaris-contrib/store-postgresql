@@ -57,6 +57,26 @@ ALTER TABLE "public"."auth_strategy" OWNER TO "postgres";
 -- Records of auth_strategy
 -- ----------------------------
 BEGIN;
+INSERT INTO auth_strategy("id",
+                          "name",
+                          "action",
+                          "owner",
+                          "comment",
+                          "default",
+                          "revision",
+                          "flag",
+                          "ctime",
+                          "mtime")
+VALUES ('fbca9bfa04ae4ead86e1ecf5811e32a9',
+        '(用户) polaris的默认策略',
+        'READ_WRITE',
+        '65e4789a6d5b49669adf1e9e8387549c',
+        'default admin',
+        1,
+        'fbca9bfa04ae4ead86e1ecf5811e32a9',
+        0,
+        current_date,
+        current_date);
 COMMIT;
 
 -- ----------------------------
@@ -77,6 +97,26 @@ ALTER TABLE "public"."auth_strategy_resource" OWNER TO "postgres";
 -- Records of auth_strategy_resource
 -- ----------------------------
 BEGIN;
+INSERT INTO auth_strategy_resource("strategy_id",
+                                     "res_type",
+                                     "res_id",
+                                     "ctime",
+                                     "mtime")
+VALUES ('fbca9bfa04ae4ead86e1ecf5811e32a9',
+        0,
+        '*',
+        current_date,
+        current_date),
+       ('fbca9bfa04ae4ead86e1ecf5811e32a9',
+        1,
+        '*',
+        current_date,
+        current_date),
+       ('fbca9bfa04ae4ead86e1ecf5811e32a9',
+        2,
+        '*',
+        current_date,
+        current_date);
 COMMIT;
 
 -- ----------------------------
@@ -226,11 +266,6 @@ ALTER TABLE "public"."client" OWNER TO "postgres";
 -- Records of client
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."client" ("id", "host", "type", "version", "region", "zone", "campus", "flag", "ctime", "mtime") VALUES ('client-0', 'client-0', 'UNKNOWN', 'client-0', 'client-0-region', 'client-0-zone', 'client-0-campus', 0, '2023-06-12 13:56:21', '2023-06-12 13:56:21');
-INSERT INTO "public"."client" ("id", "host", "type", "version", "region", "zone", "campus", "flag", "ctime", "mtime") VALUES ('client-1', 'client-1', 'UNKNOWN', 'client-1', 'client-1-region', 'client-1-zone', 'client-1-campus', 0, '2023-06-12 13:56:21', '2023-06-12 13:56:21');
-INSERT INTO "public"."client" ("id", "host", "type", "version", "region", "zone", "campus", "flag", "ctime", "mtime") VALUES ('client-2', 'client-2', 'UNKNOWN', 'client-2', 'client-2-region', 'client-2-zone', 'client-2-campus', 0, '2023-06-12 13:56:21', '2023-06-12 13:56:21');
-INSERT INTO "public"."client" ("id", "host", "type", "version", "region", "zone", "campus", "flag", "ctime", "mtime") VALUES ('client-3', 'client-3', 'UNKNOWN', 'client-3', 'client-3-region', 'client-3-zone', 'client-3-campus', 0, '2023-06-12 13:56:21', '2023-06-12 13:56:21');
-INSERT INTO "public"."client" ("id", "host", "type", "version", "region", "zone", "campus", "flag", "ctime", "mtime") VALUES ('client-4', 'client-4', 'UNKNOWN', 'client-4', 'client-4-region', 'client-4-zone', 'client-4-campus', 0, '2023-06-12 13:56:21', '2023-06-12 13:56:21');
 COMMIT;
 
 -- ----------------------------
@@ -251,11 +286,6 @@ ALTER TABLE "public"."client_stat" OWNER TO "postgres";
 -- Records of client_stat
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."client_stat" ("client_id", "target", "port", "protocol", "path") VALUES ('client-0', 'prometheus', 8080, 'http', '/metrics');
-INSERT INTO "public"."client_stat" ("client_id", "target", "port", "protocol", "path") VALUES ('client-1', 'prometheus', 8080, 'http', '/metrics');
-INSERT INTO "public"."client_stat" ("client_id", "target", "port", "protocol", "path") VALUES ('client-2', 'prometheus', 8080, 'http', '/metrics');
-INSERT INTO "public"."client_stat" ("client_id", "target", "port", "protocol", "path") VALUES ('client-3', 'prometheus', 8080, 'http', '/metrics');
-INSERT INTO "public"."client_stat" ("client_id", "target", "port", "protocol", "path") VALUES ('client-4', 'prometheus', 8080, 'http', '/metrics');
 COMMIT;
 
 -- ----------------------------
@@ -416,6 +446,26 @@ ALTER TABLE "public"."config_file_template" OWNER TO "postgres";
 -- Records of config_file_template
 -- ----------------------------
 BEGIN;
+INSERT INTO "public"."config_file_template" ("id", "name", "content", "format", "comment", "create_time", "create_by", "modify_time", "modify_by") VALUES (1, 'spring-cloud-gateway-braining', '{
+    "rules":[
+        {
+            "conditions":[
+                {
+                    "key":"${http.query.uid}",
+                    "values":["10000"],
+                    "operation":"EQUALS"
+                }
+            ],
+            "labels":[
+                {
+                    "key":"env",
+                    "value":"green"
+                }
+            ]
+        }
+    ]
+}
+', 'json', 'Spring Cloud Gateway  染色规则', '2023-06-13 01:40:24', 'polaris', '2023-06-13 01:40:34', 'polaris');
 COMMIT;
 
 -- ----------------------------
@@ -461,10 +511,6 @@ ALTER TABLE "public"."health_check" OWNER TO "postgres";
 -- Records of health_check
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."health_check" ("id", "type", "ttl") VALUES ('1112', 1, 2);
-INSERT INTO "public"."health_check" ("id", "type", "ttl") VALUES ('1111e', 1, 1);
-INSERT INTO "public"."health_check" ("id", "type", "ttl") VALUES ('1111u', 1, 1);
-INSERT INTO "public"."health_check" ("id", "type", "ttl") VALUES ('1111i', 1, 1);
 COMMIT;
 
 -- ----------------------------
@@ -500,16 +546,6 @@ ALTER TABLE "public"."instance" OWNER TO "postgres";
 -- Records of instance
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111c', '111c', '4444c', '5555c', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 17:15:03', '2023-06-10 17:15:03');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111q', '111q', '4444q', '5555q', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 17:17:22', '2023-06-10 17:17:22');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111e', '111e', '4444e', '5555e', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 18:12:08', '2023-06-10 18:12:08');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111y', '111y', '4444y', '5555y', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 18:48:17', '2023-06-10 18:48:17');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111u', '111u', '4444u', '5555u', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 18:50:30', '2023-06-10 18:50:30');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111i', '111i', '4444i', '5555i', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 0, '2023-06-10 18:56:28', '2023-06-10 18:56:28');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111t', '111t', '4444t', '5555t', 1001, '', '', 1, 0, 0, 0, '', '', '', '', 0, '', 1, '2023-06-10 18:16:21', '2023-06-10 19:15:20');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111', '111', '4444', '55555', 1, '', '', 1, 0, 0, 0, '', '', '', '', 0, 'reversion', 0, '2023-06-10 17:05:31', '2023-06-11 01:09:55');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111a', '111a', '4444a', '55555a', 1, '', '', 1, 1, 0, 0, '', '', '', '', 0, 'reversion', 0, '2023-06-10 17:10:31', '2023-06-11 01:24:17');
-INSERT INTO "public"."instance" ("id", "service_id", "vpc_id", "host", "port", "protocol", "version", "health_status", "isolate", "weight", "enable_health_check", "logic_set", "cmdb_region", "cmdb_zone", "cmdb_idc", "priority", "revision", "flag", "ctime", "mtime") VALUES ('1111b', '111a', '4444b', '55555b', 1001, '', '', 1, 1, 0, 0, '', '', '', '', 0, 'reversion', 0, '2023-06-10 17:12:04', '2023-06-11 01:24:17');
 COMMIT;
 
 -- ----------------------------
@@ -530,14 +566,6 @@ ALTER TABLE "public"."instance_metadata" OWNER TO "postgres";
 -- Records of instance_metadata
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111u', 'mkey', '6666u', '2023-06-10 18:50:30', '2023-06-10 18:50:30');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111u', 'mvalue', '7777u', '2023-06-10 18:50:30', '2023-06-10 18:50:30');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111i', 'mkey', '6666i', '2023-06-10 18:56:28', '2023-06-10 18:56:28');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111i', 'mvalue', '7777i', '2023-06-10 18:56:28', '2023-06-10 18:56:28');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111t', 'mvalue', '7777t', '2023-06-10 19:11:05', '2023-06-10 19:11:05');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111t', 'mkey', '6666t', '2023-06-10 19:11:05', '2023-06-10 19:11:05');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('111', 'aaa', '1111', '2023-06-11 01:35:36', '2023-06-11 01:35:36');
-INSERT INTO "public"."instance_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('111', 'bbb', '2222', '2023-06-11 01:35:36', '2023-06-11 01:35:36');
 COMMIT;
 
 -- ----------------------------
@@ -558,12 +586,6 @@ ALTER TABLE "public"."leader_election" OWNER TO "postgres";
 -- Records of leader_election
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('aaa', 0, 'bbb', '2023-06-08 21:02:58.295652', '2023-06-08 21:02:58.295652');
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('val1', 0, 'val2', '2023-06-08 21:27:28.860113', '2023-06-08 21:27:28.860113');
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('val3', 0, 'val4', '2023-06-08 21:28:04.848416', '2023-06-08 21:28:04.848416');
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('val5', 0, 'val6', '2023-06-08 21:28:22.117857', '2023-06-08 21:28:22.117857');
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('val7', 0, 'val8', '2023-06-08 21:30:35.287969', '2023-06-08 21:30:35.287969');
-INSERT INTO "public"."leader_election" ("elect_key", "version", "leader", "ctime", "mtime") VALUES ('test0', 0, '', '2023-06-08 22:04:50.696531', '2023-06-08 22:04:50.696531');
 COMMIT;
 
 -- ----------------------------
@@ -707,10 +729,27 @@ ALTER TABLE "public"."namespace" OWNER TO "postgres";
 -- Records of namespace
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."namespace" ("name", "comment", "token", "owner", "flag", "ctime", "mtime") VALUES ('Polaris', 'Polaris-server', '2d1bfe5d12e04d54b8ee69e62494c7fd', 'polaris', 0, '2019-09-06 07:55:07', '2019-09-06 07:55:07');
-INSERT INTO "public"."namespace" ("name", "comment", "token", "owner", "flag", "ctime", "mtime") VALUES ('default', 'Default Environment', 'e2e473081d3d4306b52264e49f7ce227', 'polaris', 0, '2021-07-27 19:37:37', '2021-07-27 19:37:37');
-INSERT INTO "public"."namespace" ("name", "comment", "token", "owner", "flag", "ctime", "mtime") VALUES ('Test1', 'Polaris-test1', '2d1bfe5d12e04d54b8ee69e62494c7fe', 'polaris', 0, '2023-06-07 21:14:27', '2023-06-07 21:48:01');
-INSERT INTO "public"."namespace" ("name", "comment", "token", "owner", "flag", "ctime", "mtime") VALUES ('Test', 'Polaris-test1', '2d1bfe5d12e04d54b8ee69e62494c7fr', 'polaris', 0, '2023-06-03 16:02:03', '2023-06-07 21:49:45');
+INSERT INTO "public"."namespace" ("name",
+                                  "comment",
+                                  "token",
+                                  "owner",
+                                  "flag",
+                                  "ctime",
+                                  "mtime")
+VALUES ('Polaris',
+        'Polaris-server',
+        '2d1bfe5d12e04d54b8ee69e62494c7fd',
+        'polaris',
+        0,
+        '2019-09-06 07:55:07',
+        '2019-09-06 07:55:07'),
+       ('default',
+        'Default Environment',
+        'e2e473081d3d4306b52264e49f7ce227',
+        'polaris',
+        0,
+        '2021-07-27 19:37:37',
+        '2021-07-27 19:37:37');
 COMMIT;
 
 -- ----------------------------
@@ -730,7 +769,6 @@ ALTER TABLE "public"."owner_service_map" OWNER TO "postgres";
 -- Records of owner_service_map
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."owner_service_map" ("id", "owner", "service", "namespace") VALUES ('6f0b97ece75c4affbbccf958651c8430', 'polaris', 'Test1', '2222');
 COMMIT;
 
 -- ----------------------------
@@ -799,7 +837,6 @@ ALTER TABLE "public"."routing_config" OWNER TO "postgres";
 -- Records of routing_config
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."routing_config" ("id", "in_bounds", "out_bounds", "revision", "flag", "ctime", "mtime") VALUES ('1111', '2223', '3333', '4444', 0, '2023-06-11 14:34:39', '2023-06-11 14:39:27');
 COMMIT;
 
 -- ----------------------------
@@ -829,7 +866,6 @@ ALTER TABLE "public"."routing_config_v2" OWNER TO "postgres";
 -- Records of routing_config_v2
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."routing_config_v2" ("id", "name", "namespace", "policy", "config", "enable", "revision", "description", "priority", "flag", "ctime", "mtime", "etime", "extend_info") VALUES ('1111', '3333', '2222', '4444', '5555', 1, '6666', '7777', 1, 0, '2023-06-11 17:21:15', '2023-06-11 17:30:37', '2023-06-11 17:30:37', '');
 COMMIT;
 
 -- ----------------------------
@@ -864,7 +900,28 @@ ALTER TABLE "public"."service" OWNER TO "postgres";
 -- Records of service
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."service" ("id", "name", "namespace", "ports", "business", "department", "cmdb_mod1", "cmdb_mod2", "cmdb_mod3", "comment", "token", "revision", "owner", "flag", "reference", "refer_filter", "platform_id", "ctime", "mtime") VALUES ('1111', 'Test1', '2222', '4444', '33333', '555', '666', '777', '888', 'Polaris-test', '2d1bfe5d12e04d54b8ee69e62494c7fe', '999', 'polaris', 0, '', NULL, '121212', '2023-06-09 15:50:31', '2023-06-09 22:02:22');
+INSERT INTO "public"."service" ("id",
+                                "name",
+                                "namespace",
+                                "comment",
+                                "business",
+                                "token",
+                                "revision",
+                                "owner",
+                                "flag",
+                                "ctime",
+                                "mtime")
+VALUES ('fbca9bfa04ae4ead86e1ecf5811e32a9',
+        'polaris.checker',
+        'Polaris',
+        'polaris checker service',
+        'polaris',
+        '7d19c46de327408d8709ee7392b7700b',
+        '301b1e9f0bbd47a6b697e26e99dfe012',
+        'polaris',
+        0,
+        '2021-09-06 07:55:07',
+        '2021-09-06 07:55:09');
 COMMIT;
 
 -- ----------------------------
@@ -885,8 +942,6 @@ ALTER TABLE "public"."service_metadata" OWNER TO "postgres";
 -- Records of service_metadata
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."service_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1112', 'a', 'b', '2023-06-09 15:44:56', '2023-06-09 15:44:56');
-INSERT INTO "public"."service_metadata" ("id", "mkey", "mvalue", "ctime", "mtime") VALUES ('1111', 'a', 'b', '2023-06-09 21:52:21', '2023-06-09 21:52:21');
 COMMIT;
 
 -- ----------------------------
@@ -906,6 +961,8 @@ ALTER TABLE "public"."start_lock" OWNER TO "postgres";
 -- Records of start_lock
 -- ----------------------------
 BEGIN;
+INSERT INTO "start_lock" ("lock_id", "lock_key", "server", "mtime")
+VALUES (1, 'sz', 'aaa', '2019-12-05 08:35:49');
 COMMIT;
 
 -- ----------------------------
@@ -971,7 +1028,6 @@ ALTER TABLE "public"."t_route" OWNER TO "postgres";
 -- Records of t_route
 -- ----------------------------
 BEGIN;
-INSERT INTO "public"."t_route" ("fip", "fmodid", "fcmdid", "fsetid", "fflag", "fstamp", "fflow") VALUES (1, 1, 1, '1', 4, '2023-06-11 17:30:37', 4);
 COMMIT;
 
 -- ----------------------------
@@ -1023,6 +1079,28 @@ ALTER TABLE "public"."user" OWNER TO "postgres";
 -- Records of user
 -- ----------------------------
 BEGIN;
+INSERT INTO "user" ("id",
+                    "name",
+                    "password",
+                    "source",
+                    "token",
+                    "token_enable",
+                    "user_type",
+                    "comment",
+                    "mobile",
+                    "email",
+                    "owner")
+VALUES ('65e4789a6d5b49669adf1e9e8387549c',
+        'polaris',
+        '$2a$10$3izWuZtE5SBdAtSZci.gs.iZ2pAn9I8hEqYrC6gwJp1dyjqQnrrum',
+        'Polaris',
+        'nu/0WRA4EqSR1FagrjRj0fZwPXuGlMpX+zCuWu4uMqy8xr1vRjisSbA25aAC3mtU8MeeRsKhQiDAynUR09I=',
+        1,
+        20,
+        'default polaris admin account',
+        '12345678910',
+        '12345678910',
+        '');
 COMMIT;
 
 -- ----------------------------
