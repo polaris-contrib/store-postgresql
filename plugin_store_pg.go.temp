@@ -18,5 +18,5 @@
 package main
 
 import (
-	_ "github.com/polaris-contrib/polaris-store-postgresql"
+	_ "github.com/polaris-contrib/store-postgresql"
 )

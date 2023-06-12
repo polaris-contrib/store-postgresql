@@ -1,6 +1,6 @@
-module github.com/polaris-contrib/polaris-store-postgresql
+module github.com/polaris-contrib/store-postgresql
 
-go 1.19
+go 1.18
 
 require github.com/smartystreets/goconvey v1.8.0
 
@@ -34,5 +34,5 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 	google.golang.org/grpc v1.55.0 // indirect
-	google.golang.org/protobuf v1.30.0 // indirect
+	google.golang.org/protobuf v1.30.0
 )

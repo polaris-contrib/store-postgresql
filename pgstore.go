@@ -21,7 +21,7 @@ import (
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/store"
 
-	"github.com/polaris-contrib/polaris-store-postgresql/store/postgresql"
+	"github.com/polaris-contrib/store-postgresql/store/postgresql"
 )
 
 func init() {
