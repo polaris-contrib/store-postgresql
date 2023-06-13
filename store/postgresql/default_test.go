@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func initConf() *postgresqlStore {
+func initConf() *PostgresqlStore {
 	conf := &store.Config{
 		Name: "Postgresql",
 		Option: map[string]interface{}{
@@ -40,7 +40,7 @@ func initConf() *postgresqlStore {
 			},*/
 		},
 	}
-	obj := &postgresqlStore{}
+	obj := &PostgresqlStore{}
 	err := obj.Initialize(conf)
 	fmt.Println(err)
 

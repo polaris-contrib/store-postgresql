@@ -404,12 +404,12 @@ store:
   name: postgresql
   option:
     master:
-      dbType: postgresql
-      dbName: polaris_server
-      dbUser: root ##DB_USER##
-      dbPwd: polaris ##DB_PWD##
-      dbAddr: "127.0.0.1" ##DB_ADDR##
-      dbPort: 5432
+      dbType: "postgres"
+      dbName: "polaris_server"
+      dbUser: "postgres" ##DB_USER##
+      dbPwd: "aaaaaa" ##DB_PWD##
+      dbAddr: "192.168.31.19" ##DB_ADDR##
+      dbPort: "5432"
       maxOpenConns: -1
       maxIdleConns: -1
       connMaxLifetime: 300 # 单位秒
