@@ -18,7 +18,7 @@
 # To re-generate a bundle for another specific version without changing the standard setup, you can:
 # - use the VERSION as arg of the build target (e.g make build VERSION=0.0.2)
 # - use environment variables to overwrite this value (e.g export VERSION=0.0.2)
-POLARIS_SERVER_VERSION = v1.17.1
+POLARIS_SERVER_VERSION = v1.17.2
 
 # IMAGE_TAG defines the image tag for the docker build.
 # To re-generate a bundle for another specific version without changing the standard setup, you can:

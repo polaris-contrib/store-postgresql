@@ -29,7 +29,7 @@ rm -rf build_resource
 
 ## 准备临时构建资源文件夹
 mkdir build_resource
-cp plugin.go.temp ./build_resource
+cp plugin_store_pg.go.temp ./build_resource
 cd build_resource
 
 git clone https://github.com/polarismesh/polaris.git
@@ -47,5 +47,6 @@ go mod tidy
 make build VERSION=${polaris_server_tag}
 
 release_file=$(ls -lstrh | grep ".zip" | awk '{print $10}' | grep -v "md5")
+
 cp ${release_file} ${workdir}
 

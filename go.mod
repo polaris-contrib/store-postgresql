@@ -4,7 +4,10 @@ go 1.18
 
 require github.com/smartystreets/goconvey v1.8.0
 
-require github.com/stretchr/testify v1.8.3 // indirect
+require (
+	github.com/kr/text v0.2.0 // indirect
+	github.com/stretchr/testify v1.8.3 // indirect
+)
 
 require (
 	github.com/BurntSushi/toml v1.3.0 // indirect
