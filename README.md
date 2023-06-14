@@ -24,13 +24,13 @@ store:
   option:
     master:
       # 设置数据库类型为 postgresql
-      dbType: postgresql
-      dbName: polaris_server
-      dbUser: ##DB_USER##
-      dbPwd: ##DB_PWD##
-      dbAddr: ##DB_ADDR##
-      maxOpenConns: 300
-      maxIdleConns: 50
-      connMaxLifetime: 300 # Unit second
-      txIsolationLevel: 2 #LevelReadCommitted
+      dbType: "postgres"
+      dbName: "polaris_server"
+      dbUser: "改成自已有用户名" ##DB_USER##
+      dbPwd: "改成自已的密码" ##DB_PWD##
+      dbAddr: "改成自已的IP" ##DB_ADDR##
+      dbPort: "改成自已的端口"
+      maxOpenConns: -1
+      maxIdleConns: -1
+      connMaxLifetime: 300 # 单位秒
 ```
