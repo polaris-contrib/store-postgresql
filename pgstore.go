@@ -18,9 +18,10 @@
 package pgstore
 
 import (
-	"github.com/polaris-contrib/store-postgresql/store/postgresql"
 	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/store"
+
+	"github.com/polaris-contrib/store-postgresql/store/postgresql"
 )
 
 func init() {

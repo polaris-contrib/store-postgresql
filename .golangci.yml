@@ -146,7 +146,7 @@ linters-settings:
       - name: import-shadowing
         severity: warning
         disabled: false
-        arguments: [ "github.com/polarismesh/polaris","namespace" ]
+        arguments: [ "github.com/polaris-contrib/store-postgresql","namespace" ]
       - name: waitgroup-by-value
         severity: warning
         disabled: false
@@ -355,7 +355,7 @@ linters-settings:
     sections:
       - standard # Standard section: captures all standard packages.
       - default # Default section: contains all imports that could not be matched to another section type.
-      - prefix(github.com/pole-group/nacosserver) # Custom section: groups all imports with the specified Prefix.
+      - prefix(github.com/polaris-contrib/store-postgresql) # Custom section: groups all imports with the specified Prefix.
       #- blank # Blank section: contains all blank imports. This section is not present unless explicitly enabled.
       #- dot # Dot section: contains all dot imports. This section is not present unless explicitly enabled.
     # Skip generated files.
