@@ -18,33 +18,34 @@
 package postgresql
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
+
+	"gopkg.in/yaml.v2"
 )
 
 type Pgsql struct {
-	//Pgsql账号
+	// Pgsql账号
 	Username string `json:"username"`
-	//Pgsql密码
+	// Pgsql密码
 	Password string `json:"password"`
-	//Pgsql地址
+	// Pgsql地址
 	Address string `json:"address"`
-	//Pgsql端口
+	// Pgsql端口
 	Port int `json:"port"`
-	//数据库名称
+	// 数据库名称
 	Database string `json:"database"`
-	//表名称
+	// 表名称
 	Table string `json:"table"`
-	//账号字段名称
+	// 账号字段名称
 	AccountField string `json:"accountField"`
-	//密码字段名称
+	// 密码字段名称
 	PwdField string `json:"pwdField"`
 }
 
 // 配置文件路径
-var ConfigPath string = "config/config.json"
+var ConfigPath string = "config/config.yaml"
 
 // postgresql配置信息缓存
 var PgsqlData *Pgsql
@@ -64,7 +65,7 @@ func Init() {
 		os.Exit(1)
 	}
 	//使用json转换至config对象中
-	err = json.Unmarshal(bytes, PgsqlData)
+	err = yaml.Unmarshal(bytes, PgsqlData)
 	if err != nil {
 		fmt.Println("json unmarshal:", err)
 		os.Exit(1)
