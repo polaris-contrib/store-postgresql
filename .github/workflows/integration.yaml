@@ -73,7 +73,19 @@ jobs:
         ports:
           # Maps port 6379 on service container to the host
           - 6379:6379
-      # TODO 拉起一个PG docker 实例
+      # Label used to access the service container
+      postgres:
+        # Docker Hub image
+        image: postgres
+        # Provide the password for postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       # Setup the environment.
       - name: Setup Go
@@ -84,49 +96,61 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v2
 
+      - name: Initialize Database
+        run: |
+          # 设置严格模式
+          mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "set sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'";
+          # 清空数据
+          mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "DROP DATABASE IF EXISTS polaris_server";
+          # 初始化 polaris 数据库
+          mysql -h127.0.0.1 -P3306 -uroot -p"polaris" < store/postgresql/scripts/polaris_server.sql
+          # 临时放开 DB 的最大连接数
+          mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "set GLOBAL max_connections = 3000;"
+
       # Compile
-      - name: Build server
+      - name: Build And Test
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-        run: make build STORE_PG_PLUGIN_VERSION= POLARIS_SERVER_VERSION=v1.17.2
-
-      # Run interface tests
-      - name: run tests
         run: |
+          workir=$(pwd)
           export STORE_MODE=sqldb
-          echo "cur STORE MODE=${STORE_MODE}"
-  
-          # # 设置严格模式
-          # mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "set sql_mode='STRICT_TRANS_TABLES,NO_AUTO_CREATE_USER,NO_ENGINE_SUBSTITUTION'";
-          # # 清空数据
-          # mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "DROP DATABASE IF EXISTS polaris_server";
-          # # 初始化 polaris 数据库
-          # mysql -h127.0.0.1 -P3306 -uroot -p"polaris" < store/mysql/scripts/polaris_server.sql
-          # # 临时放开 DB 的最大连接数
-          # mysql -h127.0.0.1 -P3306 -uroot -p"polaris" -e "set GLOBAL max_connections = 3000;"
-  
+          echo "cur STORE MODE=${STORE_MODE}" 
+          repo_full_name=${{github.event.pull_request.head.repo.full_name}}
+          head_sha=${{github.event.pull_request.head.sha}}
+          polaris_server_tag=v1.17.2
 
-          work_dir="build_resource/polaris/polaris-server-release-xxxx"
-          work_dir=$(ls | grep polaris-server-release | sed -n '1p')
-          echo "work_dir is $work_dir"
+          ## 清理之前的临时资源
+          rm -rf build_resource
+          
+          ## 准备临时构建资源文件夹
+          mkdir build_resource
+          cp plugin_store_pg.go.temp ./build_resource
+          cd build_resource
+          
+          git clone https://github.com/polarismesh/polaris.git
+          cd polaris
+          if [ "${polaris_server_tag}" != "" ]; then
+              git checkout ${polaris_server_tag}
+          fi
+          
+          cat ../plugin_store_pg.go.temp >plugin_store_pg.go
+          
+          go clean --modcache
+          go get -u github.com/polaris-contrib/store-postgresql
+          go mod edit -replace=github.com/polaris-contrib/store-postgresql=github.com/"${{github.event.pull_request.head.repo.full_name}}"@"${{github.event.pull_request.head.sha}}"
+          go mod tidy
+
+          make build VERSION=${polaris_server_tag}
+
+          # 找构建好的 server 安装目录
+          server_install_dir=$(ls | grep polaris-server-release | sed -n '1p')
+          echo "server_install_dir is $server_install_dir"
   
-          cp -rf ./test/data/polaris-server.yaml $work_dir/
-  
-          cd $work_dir
+          cp -rf ${workir}/test/data/polaris-server.yaml ${workir}/build_resource/polaris/${server_install_dir}
+          cd ${workir}/build_resource/polaris/${server_install_dir}
   
           ls -alR
-  
-          if [[ "$(uname)" == "Darwin" ]]; then
-              # Mac OS X 操作系统
-              echo "Run on MacOS"
-              # sed -i '' 's/consoleOpen: true/consoleOpen: false/g' conf/polaris-server.yaml
-          else
-              # GNU/Linux操作系统
-              echo "Run on Linux"
-              # sed -i 's/consoleOpen: \(true\|false\)/consoleOpen: false/g' conf/polaris-server.yaml
-          fi
-  
           chmod +x ./tool/*.sh
           ./tool/start.sh
   
@@ -137,7 +161,7 @@ jobs:
           cd ..
           ls -lstrh
           # 先测试普通的集成测试
-          pushd ./test/integrate
+          pushd ${workir}/build_resource/polaris/test/integrate
           echo "[INTEGRATION TEST] begin"
           curl http://127.0.0.1:8090
           go test -count=1 -v -tags integration -timeout 60m
