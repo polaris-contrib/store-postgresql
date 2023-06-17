@@ -297,7 +297,7 @@ auth:
     name: defaultStrategy
     option:
       # 控制台鉴权能力开关，默认开启
-      consoleOpen: true
+      consoleOpen: false
       # 客户端鉴权能力开关, 默认关闭
       clientOpen: false
 namespace:
@@ -407,8 +407,8 @@ store:
       dbType: "postgres"
       dbName: "polaris_server"
       dbUser: "postgres" ##DB_USER##
-      dbPwd: "aaaaaa" ##DB_PWD##
-      dbAddr: "192.168.31.19" ##DB_ADDR##
+      dbPwd: "postgres" ##DB_PWD##
+      dbAddr: "127.0.0.1" ##DB_ADDR##
       dbPort: "5432"
       maxOpenConns: -1
       maxIdleConns: -1
