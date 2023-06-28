@@ -77,7 +77,8 @@ func (l *leaderElectionStore) CreateLeaderElection(key string) error {
 	log.Debugf("[Store][database] create leader election (%s)", key)
 
 	return l.master.processWithTransaction("createLeaderElection", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("INSERT INTO leader_election(elect_key,leader) SELECT $1,$2 WHERE NOT EXISTS (SELECT 1 FROM leader_election WHERE elect_key=$3 AND leader=$4)")
+		stmt, err := tx.Prepare("INSERT INTO leader_election(elect_key,leader) SELECT $1,$2 " +
+			"WHERE NOT EXISTS (SELECT 1 FROM leader_election WHERE elect_key=$3 AND leader=$4)")
 		if err != nil {
 			return err
 		}

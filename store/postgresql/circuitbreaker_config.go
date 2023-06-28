@@ -163,7 +163,8 @@ func releaseCircuitBreaker(tx *BaseTx, cbr *model.CircuitBreakerRelation) error 
 		and circuitbreaker_rule.flag = 0 
 		on DUPLICATE key update 
 		rule_id = $4, rule_version = $5, flag = 0, mtime = '%s'`
-	str = fmt.Sprintf(str, cbr.ServiceID, cbr.RuleID, cbr.RuleVersion, GetCurrentTimeFormat(), GetCurrentTimeFormat(), GetCurrentTimeFormat())
+	str = fmt.Sprintf(str, cbr.ServiceID, cbr.RuleID, cbr.RuleVersion, GetCurrentTimeFormat(),
+		GetCurrentTimeFormat(), GetCurrentTimeFormat())
 	log.Infof("[Store][CircuitBreaker] exec release sql(%s)", str)
 	stmt, err := tx.Prepare(str)
 	if err != nil {
