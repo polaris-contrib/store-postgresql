@@ -66,7 +66,8 @@ func (t *configFileTagStore) QueryConfigFileByTag(namespace, group, fileName str
 	var idx = 1
 	group = "%" + group + "%"
 	fileName = "%" + fileName + "%"
-	querySql := t.baseSelectSql() + fmt.Sprintf(" where namespace = $%d and \"group\" like $%d and file_name like $%d ", idx, idx+1, idx+2)
+	querySql := t.baseSelectSql() + fmt.Sprintf(" where namespace = $%d and \"group\" like $%d and file_name like $%d ",
+		idx, idx+1, idx+2)
 	idx += 3
 
 	var tagWhereSql []string

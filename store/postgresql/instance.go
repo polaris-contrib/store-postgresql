@@ -1129,9 +1129,11 @@ func addInstanceMeta(tx *BaseTx, id string, meta map[string]string) error {
 	for key, value := range meta {
 		cnt++
 		if cnt == len(meta) {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", indexSort, indexSort+1, indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", indexSort, indexSort+1,
+				indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		} else {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'), ", indexSort, indexSort+1, indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'), ", indexSort, indexSort+1,
+				indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		}
 		indexSort += 3
 
@@ -1191,7 +1193,8 @@ func batchAddInstanceMeta(tx *BaseTx, instances []*model.Instance) error {
 			if !first {
 				str += ","
 			}
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2,
+				GetCurrentTimeFormat(), GetCurrentTimeFormat())
 			index += 3
 			first = false
 			args = append(args, entry.ID(), key, value)

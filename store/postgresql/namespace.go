@@ -47,14 +47,16 @@ func (ns *namespaceStore) AddNamespace(namespace *model.Namespace) error {
 				return err
 			}
 
-			str := fmt.Sprintf("insert into namespace(name, comment, token, owner, ctime, mtime) values($1, $2, $3, $4, $5, $6)")
+			str := fmt.Sprintf("insert into namespace(name, comment, token, owner, ctime, mtime) " +
+				"values($1, $2, $3, $4, $5, $6)")
 			stmt, err := tx.Prepare(str)
 			if err != nil {
 				log.Errorf("[Store][database] insert prepare[%v] commit tx err: %s", namespace, err.Error())
 				return store.Error(err)
 			}
 
-			if _, err := stmt.Exec(namespace.Name, namespace.Comment, namespace.Token, namespace.Owner, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+			if _, err := stmt.Exec(namespace.Name, namespace.Comment, namespace.Token, namespace.Owner,
+				GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 				return store.Error(err)
 			}
 
@@ -135,7 +137,8 @@ func (ns *namespaceStore) GetNamespace(name string) (*model.Namespace, error) {
 }
 
 // GetNamespaces 根据过滤条件查询命名空间及数目
-func (ns *namespaceStore) GetNamespaces(filter map[string][]string, offset, limit int) ([]*model.Namespace, uint32, error) {
+func (ns *namespaceStore) GetNamespaces(filter map[string][]string, offset,
+	limit int) ([]*model.Namespace, uint32, error) {
 	// 只查询有效数据
 	filter["flag"] = []string{"0"}
 
@@ -185,7 +188,8 @@ func (ns *namespaceStore) getNamespacesCount(filter map[string][]string) (uint32
 }
 
 // getNamespaces 根据相关条件查询对应命名空间
-func (ns *namespaceStore) getNamespaces(filter map[string][]string, offset, limit int) ([]*model.Namespace, error) {
+func (ns *namespaceStore) getNamespaces(filter map[string][]string, offset,
+	limit int) ([]*model.Namespace, error) {
 	str := genNamespaceSelectSQL()
 	order := &Order{"mtime", "desc"}
 	str, args := genNamespaceWhereSQLAndArgs(str, filter, order, offset, limit)

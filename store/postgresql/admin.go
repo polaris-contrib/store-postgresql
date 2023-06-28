@@ -481,7 +481,8 @@ func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize
 
 	var rows int64
 	err := m.master.processWithTransaction("batchCleanDeletedInstances", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("delete from instance where id in (select id from instance where flag = 1 and mtime <= $1 limit $2)")
+		stmt, err := tx.Prepare("delete from instance where id in (select id from instance where " +
+			"flag = 1 and mtime <= $1 limit $2)")
 		if err != nil {
 			return store.Error(err)
 		}

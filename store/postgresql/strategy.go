@@ -161,7 +161,8 @@ func (s *strategyStore) updateStrategy(strategy *model.ModifyStrategyDetail) err
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec([]interface{}{strategy.Action, strategy.Comment, GetCurrentTimeFormat(), strategy.ID}...); err != nil {
+	if _, err = stmt.Exec([]interface{}{strategy.Action, strategy.Comment,
+		GetCurrentTimeFormat(), strategy.ID}...); err != nil {
 		log.Error("[Store][Strategy] update strategy main info", zap.Error(err))
 		return err
 	}
@@ -589,8 +590,10 @@ func (s *strategyStore) queryStrategies(
 				countSql += " " + k + fmt.Sprintf(" like $%d ", idx)
 				args = append(args, "%"+v+"%")
 			} else if k == "ag.owner" {
-				querySql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d AND ap.principal_role = 1 )) ", idx, idx+1)
-				countSql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d AND ap.principal_role = 1 )) ", idx, idx+1)
+				querySql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d "+
+					"AND ap.principal_role = 1 )) ", idx, idx+1)
+				countSql += fmt.Sprintf(" (ag.owner = $%d OR (ap.principal_id = $%d "+
+					"AND ap.principal_role = 1 )) ", idx, idx+1)
 				idx += 1
 				args = append(args, v, v)
 			} else {
@@ -755,7 +758,8 @@ func (s *strategyStore) GetStrategyResources(principalId string,
 	return resArr, nil
 }
 
-func (s *strategyStore) getStrategyPrincipals(queryHander QueryHandler, id string) ([]model.Principal, error) {
+func (s *strategyStore) getStrategyPrincipals(queryHander QueryHandler,
+	id string) ([]model.Principal, error) {
 
 	rows, err := queryHander("SELECT principal_id, principal_role FROM auth_principal WHERE strategy_id = $1", id)
 	if err != nil {

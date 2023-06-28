@@ -153,7 +153,8 @@ func (u *userStore) updateUser(user *model.User) error {
 		tokenEnable = 0
 	}
 
-	modifySql := "UPDATE user SET password = $1, token = $2, comment = $3, token_enable = $4, mobile = $5, email = $6, " +
+	modifySql := "UPDATE user SET password = $1, token = $2, comment = $3, token_enable = $4, " +
+		"mobile = $5, email = $6, " +
 		" mtime = $7 WHERE id = $8 AND flag = 0"
 	stmt, err := tx.Prepare(modifySql)
 	if err != nil {
@@ -544,7 +545,8 @@ func (u *userStore) GetUsersForCache(mtime time.Time, firstUpdate bool) ([]*mode
 }
 
 // collectUsers General query user list
-func (u *userStore) collectUsers(handler QueryHandler, querySql string, args []interface{}) ([]*model.User, error) {
+func (u *userStore) collectUsers(handler QueryHandler, querySql string,
+	args []interface{}) ([]*model.User, error) {
 	rows, err := u.master.Query(querySql, args...)
 	if err != nil {
 		log.Error("[Store][User] list user ", zap.String("query sql", querySql), zap.Any("args", args))

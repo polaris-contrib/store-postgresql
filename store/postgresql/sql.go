@@ -52,7 +52,8 @@ func boolToInt(v bool) int {
 	return 0
 }
 
-func genNamespaceWhereSQLAndArgs(str string, filter map[string][]string, order *Order, offset, limit int) (string, []interface{}) {
+func genNamespaceWhereSQLAndArgs(str string, filter map[string][]string, order *Order,
+	offset, limit int) (string, []interface{}) {
 	num := 0
 	var sqlIndex = 1
 
@@ -136,9 +137,11 @@ func genServiceFilterSQL(filter map[string]string, indexSort int) (string, []int
 		firstIndex = false
 
 		if key == OwnerAttribute {
-			str += fmt.Sprintf(" (service.name, service.namespace) in (select service,namespace from owner_service_map where owner=$%d)", indexSort)
+			str += fmt.Sprintf(" (service.name, service.namespace) in (select service,"+
+				"namespace from owner_service_map where owner=$%d)", indexSort)
 		} else if key == "alias."+OwnerAttribute {
-			str += fmt.Sprintf(" (alias.name, alias.namespace) in (select service,namespace from owner_service_map where owner=$%d)", indexSort)
+			str += fmt.Sprintf(" (alias.name, alias.namespace) in (select service,namespace "+
+				"from owner_service_map where owner=$%d)", indexSort)
 		} else if key == "business" {
 			str += fmt.Sprintf(" %s like $%d", key, indexSort)
 			value = "%" + value + "%"
@@ -173,7 +176,8 @@ func genOrderAndPage(order *Order, page *Page, indexSort int) (string, []interfa
 }
 
 // genServiceAliasWhereSQLAndArgs 生成service alias查询数据的where语句和对应参数
-func genServiceAliasWhereSQLAndArgs(str string, filter map[string]string, order *Order, offset uint32, limit uint32, indexSort int) (
+func genServiceAliasWhereSQLAndArgs(str string, filter map[string]string, order *Order,
+	offset uint32, limit uint32, indexSort int) (
 	string, []interface{}) {
 	baseStr := str
 	filterStr, filterArgs, indexSort1 := genServiceFilterSQL(filter, indexSort)
@@ -188,7 +192,8 @@ func genServiceAliasWhereSQLAndArgs(str string, filter map[string]string, order 
 }
 
 // genWhereSQLAndArgs 生成service和instance查询数据的where语句和对应参数
-func genWhereSQLAndArgs(str string, filter, metaFilter map[string]string, order *Order, offset uint32, limit uint32) (string, []interface{}) {
+func genWhereSQLAndArgs(str string, filter, metaFilter map[string]string, order *Order,
+	offset uint32, limit uint32) (string, []interface{}) {
 	baseStr := str
 	var (
 		args  []interface{}
@@ -275,7 +280,8 @@ func genFilterSQL(filter map[string]string, index int) (string, []interface{}, i
 }
 
 func genInstanceMetadataArgs(metaFilter map[string]string, index int) (string, []interface{}, int) {
-	str := fmt.Sprintf(`instance.id in (select id from instance_metadata where $%d = $%d and $%d = $%d)`, index, index+1, index+2, index+3)
+	str := fmt.Sprintf(`instance.id in (select id from instance_metadata where $%d = $%d and $%d = $%d)`,
+		index, index+1, index+2, index+3)
 	args := make([]interface{}, 0, 2)
 	for k, v := range metaFilter {
 		args = append(args, k)
@@ -285,7 +291,8 @@ func genInstanceMetadataArgs(metaFilter map[string]string, index int) (string, [
 }
 
 // genRuleFilterSQL 根据规则的filter生成where相关的语句
-func genRuleFilterSQL(tableName string, filter map[string]string, index int) (string, []interface{}, int) {
+func genRuleFilterSQL(tableName string, filter map[string]string,
+	index int) (string, []interface{}, int) {
 	if len(filter) == 0 {
 		return "", nil, index
 	}

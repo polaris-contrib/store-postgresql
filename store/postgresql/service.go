@@ -995,9 +995,11 @@ func addServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 	for key, value := range meta {
 		cnt++
 		if cnt == len(meta) {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2,
+				GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		} else {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'),", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'),", index, index+1, index+2,
+				GetCurrentTimeFormat(), GetCurrentTimeFormat())
 		}
 		index += 3
 
@@ -1171,7 +1173,8 @@ func filterInstance(filters *store.InstanceArgs, indexSort int) (string, []inter
 // 生成子查询语句
 // 多个metadata，取交集（and）
 func filterMetadata(metas map[string]string, indexSort int) (string, []interface{}, int) {
-	str := fmt.Sprintf("(select id from service_metadata where $%d = $%d and $%d = $%d)", indexSort+1, indexSort+2, indexSort+3, indexSort+4)
+	str := fmt.Sprintf("(select id from service_metadata where $%d = $%d and $%d = $%d)",
+		indexSort+1, indexSort+2, indexSort+3, indexSort+4)
 	args := make([]interface{}, 0, 2)
 	for key, value := range metas {
 		args = append(args, key)

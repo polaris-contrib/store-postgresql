@@ -59,7 +59,8 @@ func (rs *routingConfigStore) CreateRoutingConfig(conf *model.RoutingConfig) err
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err = stmt.Exec(conf.ID, conf.InBounds, conf.OutBounds, conf.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+			if _, err = stmt.Exec(conf.ID, conf.InBounds, conf.OutBounds,
+				conf.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
 				log.Errorf("[Store][database] create routing(%+v) err: %s", conf, err.Error())
 				return store.Error(err)
 			}
@@ -158,7 +159,8 @@ func (rs *routingConfigStore) DeleteRoutingConfigTx(tx store.Tx, serviceID strin
 }
 
 // GetRoutingConfigsForCache 缓存增量拉取
-func (rs *routingConfigStore) GetRoutingConfigsForCache(mtime time.Time, firstUpdate bool) ([]*model.RoutingConfig, error) {
+func (rs *routingConfigStore) GetRoutingConfigsForCache(mtime time.Time,
+	firstUpdate bool) ([]*model.RoutingConfig, error) {
 	str := `select id, in_bounds, out_bounds, revision,flag, ctime, mtime  
 			from routing_config where mtime > $1`
 	if firstUpdate {
