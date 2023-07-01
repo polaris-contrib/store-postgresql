@@ -113,7 +113,8 @@ func (l *leaderElectionStore) GetVersion(key string) (int64, error) {
 }
 
 // CompareAndSwapVersion compare key version and update
-func (l *leaderElectionStore) CompareAndSwapVersion(key string, curVersion int64, newVersion int64, leader string) (bool, error) {
+func (l *leaderElectionStore) CompareAndSwapVersion(key string, curVersion int64, newVersion int64,
+	leader string) (bool, error) {
 	var rows int64
 
 	err := l.master.processWithTransaction("compareAndSwapVersion", func(tx *BaseTx) error {
@@ -496,12 +497,14 @@ func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize
 
 		tRows, err := result.RowsAffected()
 		if err != nil {
-			log.Warnf("[Store][database] batch clean soft deleted instances(%d), get RowsAffected err: %s", batchSize, err.Error())
+			log.Warnf("[Store][database] batch clean soft deleted instances(%d), get RowsAffected err: %s",
+				batchSize, err.Error())
 			return store.Error(err)
 		}
 
 		if err := tx.Commit(); err != nil {
-			log.Errorf("[Store][database] batch clean soft deleted instances(%d) commit tx err: %s", batchSize, err.Error())
+			log.Errorf("[Store][database] batch clean soft deleted instances(%d) commit tx err: %s",
+				batchSize, err.Error())
 			return err
 		}
 
@@ -518,7 +521,8 @@ func (m *adminStore) GetUnHealthyInstances(timeout time.Duration, limit uint32) 
 	log.Infof("[Store][database] get unhealthy instances which mtime timeout %s (%d)", timeout, limit)
 
 	diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
-	queryStr := "select id from instance where flag=0 and enable_health_check=1 and health_status=0 and mtime < $1 limit $2"
+	queryStr := "select id from instance where flag=0 and enable_health_check=1 and health_status=0 " +
+		"and mtime < $1 limit $2"
 	rows, err := m.master.Query(queryStr, UnixSecondToTime(diffTime), limit)
 	if err != nil {
 		log.Errorf("[Store][database] get unhealthy instances, err: %s", err.Error())
@@ -550,7 +554,8 @@ func (m *adminStore) BatchCleanDeletedClients(timeout time.Duration, batchSize u
 
 	var rows int64
 	err := m.master.processWithTransaction("batchCleanDeletedClients", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("delete from client where id in (select id from client where flag = 1 and mtime <= $1 limit $2)")
+		stmt, err := tx.Prepare("delete from client where id in " +
+			"(select id from client where flag = 1 and mtime <= $1 limit $2)")
 		if err != nil {
 			return store.Error(err)
 		}

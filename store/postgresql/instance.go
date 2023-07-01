@@ -634,7 +634,8 @@ func (ins *instanceStore) BatchAppendInstanceMetadata(requests []*store.Instance
 			args := make([]interface{}, 0, len(metadata)*3)
 			var index = 1
 			for k, v := range metadata {
-				values = append(values, fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat()))
+				values = append(values, fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')",
+					index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat()))
 				index += 3
 				args = append(args, id, k, v)
 			}
@@ -1025,7 +1026,8 @@ func batchAddMainInstances(tx *BaseTx, instances []*model.Instance) error {
 		if !first {
 			str += ","
 		}
-		str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, '%v', '%v')",
+		str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, "+
+			"$%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, '%v', '%v')",
 			index, index+1, index+2, index+3, index+4, index+5, index+6, index+7, index+8,
 			index+9, index+10, index+11, index+12, index+13, index+14, index+15, index+16,
 			GetCurrentTimeFormat(), GetCurrentTimeFormat())

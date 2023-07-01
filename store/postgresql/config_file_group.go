@@ -53,7 +53,7 @@ func (fg *configFileGroupStore) CreateConfigFileGroup(
 
 // GetConfigFileGroup 获取配置文件组
 func (fg *configFileGroupStore) GetConfigFileGroup(namespace, name string) (*model.ConfigFileGroup, error) {
-	querySql := fg.genConfigFileGroupSelectSql() + fmt.Sprintf(" where namespace=$1 and name=$2")
+	querySql := fg.genConfigFileGroupSelectSql() + " where namespace=$1 and name=$2"
 	rows, err := fg.master.Query(querySql, namespace, name)
 	if err != nil {
 		return nil, store.Error(err)

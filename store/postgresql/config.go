@@ -51,9 +51,9 @@ var ConfigPath string = "config/config.yaml"
 var PgsqlData *Pgsql
 
 func Init() {
-	//初始化配置对象
+	// 初始化配置对象
 	PgsqlData = new(Pgsql)
-	//读取配置文件
+	// 读取配置文件
 	file, err := os.Open(ConfigPath)
 	if err != nil {
 		fmt.Println("config path:", err)
@@ -64,7 +64,7 @@ func Init() {
 		fmt.Println("config file:", err)
 		os.Exit(1)
 	}
-	//使用json转换至config对象中
+	// 使用json转换至config对象中
 	err = yaml.Unmarshal(bytes, PgsqlData)
 	if err != nil {
 		fmt.Println("json unmarshal:", err)

@@ -77,7 +77,8 @@ func (b *BaseDB) openDatabase() error {
 		c.dbPwd = pwd
 	}
 
-	dns := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s sslmode=disable", c.dbAddr, c.dbPort, c.dbUser, c.dbPwd, c.dbName)
+	dns := fmt.Sprintf("host=%s port=%s user=%s password=%s dbname=%s "+
+		"sslmode=disable", c.dbAddr, c.dbPort, c.dbUser, c.dbPwd, c.dbName)
 	db, err := sql.Open(c.dbType, dns)
 	if err != nil {
 		log.Errorf("[Store][database] sql open err: %s", err.Error())

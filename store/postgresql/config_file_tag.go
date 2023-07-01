@@ -95,8 +95,9 @@ func (t *configFileTagStore) QueryConfigFileByTag(namespace, group, fileName str
 }
 
 // QueryTagByConfigFile 查询配置文件标签
-func (t *configFileTagStore) QueryTagByConfigFile(namespace, group, fileName string) ([]*model.ConfigFileTag, error) {
-	querySql := t.baseSelectSql() + fmt.Sprintf(" where namespace = $1 and \"group\" = $2 and file_name = $3")
+func (t *configFileTagStore) QueryTagByConfigFile(namespace, group,
+	fileName string) ([]*model.ConfigFileTag, error) {
+	querySql := t.baseSelectSql() + " where namespace = $1 and \"group\" = $2 and file_name = $3"
 	rows, err := t.db.Query(querySql, namespace, group, fileName)
 	if err != nil {
 		return nil, store.Error(err)
@@ -110,7 +111,8 @@ func (t *configFileTagStore) QueryTagByConfigFile(namespace, group, fileName str
 }
 
 // DeleteConfigFileTag 删除配置文件标签
-func (t *configFileTagStore) DeleteConfigFileTag(tx store.Tx, namespace, group, fileName, key, value string) error {
+func (t *configFileTagStore) DeleteConfigFileTag(tx store.Tx, namespace, group,
+	fileName, key, value string) error {
 	deleteSql := "delete from config_file_tag where key = $1 and value = $2 and namespace = $3 " +
 		" and \"group\" = $4 and file_name = $5"
 	var err error

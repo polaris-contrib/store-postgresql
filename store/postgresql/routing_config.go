@@ -246,7 +246,8 @@ func (rs *routingConfigStore) GetRoutingConfigs(filter map[string]string,
 	default:
 	}
 
-	str := genQueryRoutingConfigSQL() + filterStr + fmt.Sprintf(" order by routing_config.mtime desc limit $%d offset $%d", index, index+1)
+	str := genQueryRoutingConfigSQL() + filterStr +
+		fmt.Sprintf(" order by routing_config.mtime desc limit $%d offset $%d", index, index+1)
 	args = append(args, limit, offset)
 	rows, err := rs.master.Query(str, args...)
 	if err != nil {

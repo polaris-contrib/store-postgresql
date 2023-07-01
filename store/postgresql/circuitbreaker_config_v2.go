@@ -247,7 +247,8 @@ func (c *circuitBreakerStore) getBriefCircuitBreakerRules(
 	filter map[string]string, offset uint32, limit uint32) ([]*model.CircuitBreakerRule, error) {
 	queryStr, args, idx := genCircuitBreakerRuleSQL(filter)
 	args = append(args, limit, offset)
-	str := queryCircuitBreakerRuleBriefSql + queryStr + fmt.Sprintf(` order by mtime desc limit $%d offset $%d`, idx, idx+1)
+	str := queryCircuitBreakerRuleBriefSql + queryStr +
+		fmt.Sprintf(` order by mtime desc limit $%d offset $%d`, idx, idx+1)
 
 	rows, err := c.master.Query(str, args...)
 	if err != nil {
