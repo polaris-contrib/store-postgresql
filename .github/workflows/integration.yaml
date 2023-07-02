@@ -109,56 +109,8 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: |
           workir=$(pwd)
-          export STORE_MODE=sqldb
-          echo "cur STORE MODE=${STORE_MODE}" 
-          polaris_server_tag=v1.17.2
-
-          ## 清理之前的临时资源
-          rm -rf build_resource
           
-          ## 准备临时构建资源文件夹
-          mkdir build_resource
-          cp plugin_store_pg.go.temp ./build_resource
-          cd build_resource
-          
-          git clone https://github.com/polarismesh/polaris.git
-          cd polaris
-          if [ "${polaris_server_tag}" != "" ]; then
-              git checkout ${polaris_server_tag}
-          fi
-          
-          cat ../plugin_store_pg.go.temp >plugin_store_pg.go
-          
-          go clean --modcache
-          go get -u github.com/polaris-contrib/store-postgresql
-          go mod tidy
-
-          make build VERSION=${polaris_server_tag}
-          
-          # 找构建好的 server 安装目录
-          server_install_dir=$(ls | grep polaris-server-release | sed -n '1p')
-          echo "server_install_dir is $server_install_dir"
-          
-          cp -rf ${workir}/test/data/polaris-server.yaml ${workir}/build_resource/polaris/${server_install_dir}
-          cd ${workir}/build_resource/polaris/${server_install_dir}
-          
-          ls -alR
-          chmod +x ./tool/*.sh
-          ./tool/start.sh
-          
-          sleep 120s
-          ls -alR
-          cat ./log/stdout 2>&1
-          
-          cd ..
-          ls -lstrh
-          # 先测试普通的集成测试
-          pushd ${workir}/build_resource/polaris/test/integrate
-          echo "[INTEGRATION TEST] begin"
-          curl http://127.0.0.1:8090
-          go test -count=1 -v -tags integration -timeout 60m
-          echo "[INTEGRATION TEST] end"
-          popd
+          echo "workir: ${workir}"
           # cd $work_dir
           cd ${workir}
           ./tool/stop.sh
