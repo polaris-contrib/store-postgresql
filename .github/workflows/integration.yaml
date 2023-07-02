@@ -121,10 +121,14 @@ jobs:
           ## 清理之前的临时资源
           rm -rf build_resource
           
+          echo "88888888"
+          
           ## 准备临时构建资源文件夹
           mkdir build_resource
           cp plugin_store_pg.go.temp ./build_resource
           cd build_resource
+          
+          echo "7777777"
           
           git clone https://github.com/polarismesh/polaris.git
           cd polaris
@@ -134,12 +138,16 @@ jobs:
           
           cat ../plugin_store_pg.go.temp >plugin_store_pg.go
           
+          echo "666666"
+          
           go clean --modcache
           go get -u github.com/polaris-contrib/store-postgresql
           ## go mod edit -replace=github.com/polaris-contrib/store-postgresql=github.com/"${{github.event.pull_request.head.repo.full_name}}"@"${{github.event.pull_request.head.sha}}"
           go mod tidy
 
           make build VERSION=${polaris_server_tag}
+          
+          echo "5555"
 
           # 找构建好的 server 安装目录
           server_install_dir=$(ls | grep polaris-server-release | sed -n '1p')
