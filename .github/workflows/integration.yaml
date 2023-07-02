@@ -113,7 +113,7 @@ jobs:
           echo "cur STORE MODE=${STORE_MODE}" 
           ## repo_full_name=${{github.event.pull_request.head.repo.full_name}}
           
-          echo "bianliang-${{github.event.pull_request}}-111111111-${{toJson(github)}}"
+          ## echo "bianliang-${{github.event.pull_request}}-111111111-${{toJson(github)}}"
           
           ## head_sha=${{github.event.pull_request.head.sha}}
           polaris_server_tag=v1.17.2
@@ -136,7 +136,7 @@ jobs:
           
           go clean --modcache
           go get -u github.com/polaris-contrib/store-postgresql
-          go mod edit -replace=github.com/polaris-contrib/store-postgresql=github.com/"${{github.event.pull_request.head.repo.full_name}}"@"${{github.event.pull_request.head.sha}}"
+          ## go mod edit -replace=github.com/polaris-contrib/store-postgresql=github.com/"${{github.event.pull_request.head.repo.full_name}}"@"${{github.event.pull_request.head.sha}}"
           go mod tidy
 
           make build VERSION=${polaris_server_tag}
