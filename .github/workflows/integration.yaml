@@ -113,7 +113,7 @@ jobs:
           echo "cur STORE MODE=${STORE_MODE}" 
           repo_full_name=${{github.event.pull_request.head.repo.full_name}}
           
-          echo &{repo_full_name}
+          echo "&{repo_full_name}"
           
           head_sha=${{github.event.pull_request.head.sha}}
           polaris_server_tag=v1.17.2
