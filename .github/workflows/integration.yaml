@@ -144,17 +144,25 @@ jobs:
           # 找构建好的 server 安装目录
           server_install_dir=$(ls | grep polaris-server-release | sed -n '1p')
           echo "server_install_dir is $server_install_dir"
+          
+          echo "1111111111111"
   
           cp -rf ${workir}/test/data/polaris-server.yaml ${workir}/build_resource/polaris/${server_install_dir}
           cd ${workir}/build_resource/polaris/${server_install_dir}
+          
+          echo "2222222222222"
   
           ls -alR
           chmod +x ./tool/*.sh
           ./tool/start.sh
+          
+          echo "33333333333"
   
           sleep 120s
           ls -alR
           cat ./log/stdout 2>&1
+          
+          echo "444444444444"
   
           cd ..
           ls -lstrh
