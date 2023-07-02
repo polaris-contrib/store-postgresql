@@ -159,8 +159,7 @@ jobs:
           go test -count=1 -v -tags integration -timeout 60m
           echo "[INTEGRATION TEST] end"
           popd
-          # cd $work_dir
-          # cd ${workir}
+          cd ${workir}/build_resource/polaris/${server_install_dir}
           ./tool/stop.sh
           cd ..
 
