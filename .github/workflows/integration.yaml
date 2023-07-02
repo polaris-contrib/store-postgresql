@@ -113,7 +113,7 @@ jobs:
           echo "cur STORE MODE=${STORE_MODE}" 
           repo_full_name=${{github.event.pull_request.head.repo.full_name}}
           
-          echo "bianliang-${{github.event}}-111111111-$GITHUB_BASE_REF"
+          echo "bianliang-${{github.event.pull_request}}-111111111-$GITHUB_BASE_REF"
           
           head_sha=${{github.event.pull_request.head.sha}}
           polaris_server_tag=v1.17.2
