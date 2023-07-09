@@ -32,7 +32,7 @@ mkdir build_resource
 cp plugin_store_pg.go.temp ./build_resource
 cd build_resource
 
-git clone https://github.com/polarismesh/polaris.git
+git clone git@github.com:polarismesh/polaris.git
 cd polaris
 if [ "${polaris_server_tag}" != "" ]; then
     git checkout ${polaris_server_tag}

@@ -524,12 +524,9 @@ func (u *userStore) listGroupUsers(filters map[string]string, offset uint32, lim
 // GetUsersForCache Get user information, mainly for cache
 func (u *userStore) GetUsersForCache(mtime time.Time, firstUpdate bool) ([]*model.User, error) {
 	args := make([]interface{}, 0)
-	querySql := `
-	  SELECT u.id, u.name, u.password, u.owner, u.comment, u.source
-		  , u.token, u.token_enable, user_type, u.ctime
-		  , u.mtime, u.flag, u.mobile, u.email
-	  FROM user u 
-	  `
+	querySql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, u.token, " +
+		"u.token_enable, user_type, u.ctime, u.mtime, u.flag, u.mobile, u.email " +
+		"FROM user u"
 
 	if !firstUpdate {
 		querySql += " WHERE u.mtime >= $1 "
