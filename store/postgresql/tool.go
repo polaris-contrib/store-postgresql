@@ -47,12 +47,16 @@ func (t *toolStore) GetUnixSecond(maxWait time.Duration) (int64, error) {
 		log.Infof("[Store][database] query now spend %s, exceed %s, skip", timePass, maxWait)
 		return 0, nil
 	}
-	var value int64
+	var (
+		curTime time.Time
+		value   int64
+	)
 	for rows.Next() {
-		if err := rows.Scan(&value); err != nil {
+		if err := rows.Scan(&curTime); err != nil {
 			log.Errorf("[Store][database] get now rows scan err: %s", err.Error())
 			return 0, err
 		}
+		value = ConvertSecond(curTime)
 	}
 	return value, nil
 }
