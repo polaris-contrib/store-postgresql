@@ -104,11 +104,11 @@ func (cs *clientStore) BatchDeleteClients(ids []string) error {
 
 // GetMoreClients 根据mtime获取增量clients，返回所有store的变更信息
 func (cs *clientStore) GetMoreClients(mtime time.Time, firstUpdate bool) (map[string]*model.Client, error) {
-	str := `select client.id, client.host, client.type, client.version, client.region,
-		 client.zone, client.campus, client.flag,  client_stat.target, 
-		 COALESCE(client_stat.port, 0), client_stat.protocol, client_stat.path, 
-		 client.ctime, client.mtime
-		 from client left join client_stat on client.id = client_stat.client_id `
+	str := "select client.id, client.host, client.type, client.version, client.region, " +
+		"client.zone, client.campus, client.flag, client_stat.target, COALESCE(client_stat.port, 0), " +
+		"client_stat.protocol, client_stat.path, client.ctime, client.mtime " +
+		"from client " +
+		"left join client_stat on client.id = client_stat.client_id "
 	str += " where client.mtime >= $1"
 	if firstUpdate {
 		str += " and flag != 1"
@@ -216,8 +216,8 @@ func batchDeleteClientsMain(tx *BaseTx, ids []string) error {
 			return nil
 		}
 		placeholder, _ := PlaceholdersNI(len(objects), 1)
-		str := fmt.Sprintf(`update client set flag = 1, mtime = %s`, GetCurrentTimeFormat())
-		str += ` where id in ( ` + placeholder + `)`
+		str := fmt.Sprintf("update client set flag = 1, mtime = %s", GetCurrentTimeFormat())
+		str += " where id in ( " + placeholder + ")"
 		stmt, err := tx.Prepare(str)
 		if err != nil {
 			return store.Error(err)
@@ -238,7 +238,7 @@ func batchCleanClientStats(tx *BaseTx, ids []string) error {
 			return nil
 		}
 		placeholder, _ := PlaceholdersNI(len(objects), 1)
-		str := `delete from client_stat where client_id in (` + placeholder + `)`
+		str := "delete from client_stat where client_id in (" + placeholder + ")"
 		stmt, err := tx.Prepare(str)
 		if err != nil {
 			return store.Error(err)
@@ -362,8 +362,8 @@ func (cs *clientStore) updateClient(client *model.Client) error {
 }
 
 func addClientMain(tx *BaseTx, client *model.Client) error {
-	str := `insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime)
-			 values($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)`
+	str := "insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime) " +
+		"values($1, $2, $3, $4, $5, $6, $7, 0, $8, $9)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -383,8 +383,7 @@ func addClientMain(tx *BaseTx, client *model.Client) error {
 }
 
 func batchAddClientMain(tx *BaseTx, clients []*model.Client) error {
-	str := `insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime)
-		 values`
+	str := "insert into client(id, host, type, version, region, zone, campus, flag, ctime, mtime) values"
 	first := true
 	args := make([]interface{}, 0)
 	idx := 1
@@ -418,8 +417,7 @@ func batchAddClientStat(tx *BaseTx, client2Stats map[string][]*apiservice.StatIn
 	if len(client2Stats) == 0 {
 		return nil
 	}
-	str := `insert into client_stat(client_id, target, port, protocol, path)
-			 values`
+	str := "insert into client_stat(client_id, target, port, protocol, path) values"
 	first := true
 	args := make([]interface{}, 0)
 	idx := 1
@@ -452,8 +450,7 @@ func addClientStat(tx *BaseTx, client *model.Client) error {
 	if len(stats) == 0 {
 		return nil
 	}
-	str := `insert into client_stat(client_id, target, port, protocol, path)
-			 values`
+	str := "insert into client_stat(client_id, target, port, protocol, path) values"
 	first := true
 	args := make([]interface{}, 0)
 	idx := 1
@@ -480,8 +477,8 @@ func addClientStat(tx *BaseTx, client *model.Client) error {
 }
 
 func updateClientMain(tx *BaseTx, client *model.Client) error {
-	str := `update client set host = $1, type = $2, version = $3, region = $4, 
-                  zone = $5, campus = $6, mtime = $7 where id = $8`
+	str := "update client set host = $1, type = $2, version = $3, region = $4, " +
+		"zone = $5, campus = $6, mtime = $7 where id = $8"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err

@@ -266,12 +266,9 @@ func (u *userStore) GetSubCount(user *model.User) (uint32, error) {
 // GetUser get user by user id
 func (u *userStore) GetUser(id string) (*model.User, error) {
 	var tokenEnable, userType int
-	getSql := `
-		 SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, u.token, u.token_enable, 
-		 	u.user_type, u.mobile, u.email
-		 FROM user u
-		 WHERE u.flag = 0 AND u.id = $1 
-	  `
+	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
+		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM user u " +
+		"WHERE u.flag = 0 AND u.id = $1"
 	var (
 		row  = u.master.QueryRow(getSql, id)
 		user = new(model.User)
@@ -294,14 +291,9 @@ func (u *userStore) GetUser(id string) (*model.User, error) {
 
 // GetUserByName 根据用户名、owner 获取用户
 func (u *userStore) GetUserByName(name, ownerId string) (*model.User, error) {
-	getSql := `
-		 SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, u.token, u.token_enable, 
-		 	u.user_type, u.mobile, u.email
-		 FROM user u
-		 WHERE u.flag = 0
-			  AND u.name = $1
-			  AND u.owner = $2 
-	  `
+	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
+		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM user u " +
+		"WHERE u.flag = 0 AND u.name = $1 AND u.owner = $2"
 
 	var (
 		row                   = u.master.QueryRow(getSql, name, ownerId)
@@ -330,14 +322,9 @@ func (u *userStore) GetUserByIds(ids []string) ([]*model.User, error) {
 		return nil, nil
 	}
 
-	getSql := `
-	  SELECT u.id, u.name, u.password, u.owner, u.comment, u.source
-		  , u.token, u.token_enable, u.user_type, u.ctime
-		  , u.mtime, u.flag, u.mobile, u.email
-	  FROM user u
-	  WHERE u.flag = 0 
-		  AND u.id IN ( 
-	  `
+	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
+		"u.token, u.token_enable, u.user_type, u.ctime , u.mtime, u.flag, u.mobile, " +
+		"u.email FROM user u WHERE u.flag = 0 AND u.id IN ("
 
 	var idx = 1
 
@@ -391,13 +378,8 @@ func (u *userStore) GetUsers(filters map[string]string, offset uint32, limit uin
 func (u *userStore) listUsers(filters map[string]string, offset uint32, limit uint32) (uint32,
 	[]*model.User, error) {
 	countSql := "SELECT COUNT(*) FROM user WHERE flag = 0 "
-	getSql := `
-	  SELECT id, name, password, owner, comment, source
-		  , token, token_enable, user_type, ctime
-		  , mtime, flag, mobile, email
-	  FROM user
-	  WHERE flag = 0 
-	  `
+	getSql := "SELECT id, name, password, owner, comment, source, token, token_enable, " +
+		"user_type, ctime, mtime, flag, mobile, email FROM user WHERE flag = 0"
 
 	if val, ok := filters["hide_admin"]; ok && val == "true" {
 		delete(filters, "hide_admin")
@@ -460,20 +442,13 @@ func (u *userStore) listGroupUsers(filters map[string]string, offset uint32, lim
 	}
 
 	args := make([]interface{}, 0, len(filters))
-	querySql := `
-		  SELECT u.id, name, password, owner, u.comment, source
-			  , token, token_enable, user_type, u.ctime
-			  , u.mtime, u.flag, u.mobile, u.email
-		  FROM user_group_relation ug
-			  LEFT JOIN user u ON ug.user_id = u.id AND u.flag = 0
-		  WHERE 1=1 
-	  `
-	countSql := `
-		  SELECT COUNT(*)
-		  FROM user_group_relation ug
-			  LEFT JOIN user u ON ug.user_id = u.id AND u.flag = 0 
-		  WHERE 1=1 
-	  `
+	querySql := "SELECT u.id, name, password, owner, u.comment, source, token, " +
+		"token_enable, user_type, u.ctime, u.mtime, u.flag, u.mobile, u.email " +
+		"FROM user_group_relation ug LEFT JOIN user u ON ug.user_id = u.id " +
+		"AND u.flag = 0 WHERE 1=1"
+
+	countSql := "SELECT COUNT(*) FROM user_group_relation ug " +
+		"LEFT JOIN user u ON ug.user_id = u.id AND u.flag = 0 WHERE 1=1"
 
 	if val, ok := filters["hide_admin"]; ok && val == "true" {
 		delete(filters, "hide_admin")

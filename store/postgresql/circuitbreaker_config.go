@@ -52,10 +52,9 @@ func (c *circuitBreakerStore) CreateCircuitBreaker(cb *model.CircuitBreaker) err
 			return store.Error(err)
 		}
 
-		str := `insert into circuitbreaker_rule
-			(id, version, name, namespace, business, department, comment, inbounds, 
-			outbounds, token, owner, revision, flag, ctime, mtime)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`
+		str := "insert into circuitbreaker_rule(id, version, name, namespace, business, " +
+			"department, comment, inbounds, outbounds, token, owner, revision, flag, " +
+			"ctime, mtime) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)"
 		stmt, err := tx.Prepare(str)
 		if err != nil {
 			return store.Error(err)
@@ -102,12 +101,11 @@ func (c *circuitBreakerStore) TagCircuitBreaker(cb *model.CircuitBreaker) error 
 // tagCircuitBreaker 给master熔断规则打一个version tag的内部函数
 func tagCircuitBreaker(tx *BaseTx, cb *model.CircuitBreaker) error {
 	// 需要保证master规则存在
-	str := `insert into circuitbreaker_rule
-			(id, version, name, namespace, business, department, comment, inbounds, 
-			outbounds, token, owner, revision, ctime, mtime) 
-			select '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', 
-			'%s', '%s', '%s', '%s', '%s', '%s' from circuitbreaker_rule 
-			where id = $1 and version = 'master'`
+	str := "insert into circuitbreaker_rule(id, version, name, namespace, business, " +
+		"department, comment, inbounds, outbounds, token, owner, revision, ctime, mtime) " +
+		"select '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', " +
+		"'%s', '%s' from circuitbreaker_rule where id = $1 and version = 'master'"
+
 	str = fmt.Sprintf(str, cb.ID, cb.Version, cb.Name, cb.Namespace, cb.Business, cb.Department, cb.Comment,
 		cb.Inbounds, cb.Outbounds, cb.Token, cb.Owner, cb.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat())
 	stmt, err := tx.Prepare(str)
@@ -156,13 +154,12 @@ func (c *circuitBreakerStore) ReleaseCircuitBreaker(cbr *model.CircuitBreakerRel
 // @note 可能存在服务的规则，由旧的更新到新的场景
 func releaseCircuitBreaker(tx *BaseTx, cbr *model.CircuitBreakerRelation) error {
 	// 发布规则时，需要保证规则已经被标记
-	str := `insert into circuitbreaker_rule_relation(service_id, rule_id, rule_version, flag, ctime, mtime)
-		select '%s', '%s', '%s', 0, '%s', '%s' from service, circuitbreaker_rule 
-		where service.id = $1 and service.flag = 0 
-		and circuitbreaker_rule.id = $2 and circuitbreaker_rule.version = $3 
-		and circuitbreaker_rule.flag = 0 
-		on DUPLICATE key update 
-		rule_id = $4, rule_version = $5, flag = 0, mtime = '%s'`
+	str := "insert into circuitbreaker_rule_relation(service_id, rule_id, rule_version, " +
+		"flag, ctime, mtime) select '%s', '%s', '%s', 0, '%s', '%s' from service, " +
+		"circuitbreaker_rule where service.id = $1 and service.flag = 0 and " +
+		"circuitbreaker_rule.id = $2 and circuitbreaker_rule.version = $3 and " +
+		"circuitbreaker_rule.flag = 0 on DUPLICATE key update rule_id = $4, " +
+		"rule_version = $5, flag = 0, mtime = '%s'"
 	str = fmt.Sprintf(str, cbr.ServiceID, cbr.RuleID, cbr.RuleVersion, GetCurrentTimeFormat(),
 		GetCurrentTimeFormat(), GetCurrentTimeFormat())
 	log.Infof("[Store][CircuitBreaker] exec release sql(%s)", str)
@@ -189,8 +186,8 @@ func releaseCircuitBreaker(tx *BaseTx, cbr *model.CircuitBreakerRelation) error 
 // UnbindCircuitBreaker 解绑熔断规则
 func (c *circuitBreakerStore) UnbindCircuitBreaker(serviceID, ruleID, ruleVersion string) error {
 	return c.master.processWithTransaction(labelUnbindCircuitBreakerRuleOld, func(tx *BaseTx) error {
-		str := `update circuitbreaker_rule_relation set flag = 1, mtime = $1 where service_id = $2 
-                and rule_id = $3 and rule_version = $4`
+		str := "update circuitbreaker_rule_relation set flag = 1, mtime = $1 " +
+			"where service_id = $2 and rule_id = $3 and rule_version = $4"
 		stmt, err := tx.Prepare(str)
 		if err != nil {
 			return err
@@ -214,11 +211,9 @@ func (c *circuitBreakerStore) UnbindCircuitBreaker(serviceID, ruleID, ruleVersio
 func (c *circuitBreakerStore) DeleteTagCircuitBreaker(id string, version string) error {
 	return c.master.processWithTransaction(labelDeleteTagCircuitBreakerRuleOld, func(tx *BaseTx) error {
 		// 需要保证规则无绑定服务
-		str := `update circuitbreaker_rule set flag = 1, mtime = $1
-			where id = $2 and version = $3 
-			and id not in 
-			(select DISTINCT(rule_id) from circuitbreaker_rule_relation 
-				where rule_id = $4 and rule_version = $5 and flag = 0)`
+		str := "update circuitbreaker_rule set flag = 1, mtime = $1 where id = $2 and version = $3 " +
+			"and id not in (select DISTINCT(rule_id) from circuitbreaker_rule_relation " +
+			"where rule_id = $4 and rule_version = $5 and flag = 0)"
 		log.Infof("[Store][circuitBreaker] delete rule id(%s) version(%s), sql(%s)", id, version, str)
 		stmt, err := tx.Prepare(str)
 		if err != nil {
@@ -242,11 +237,9 @@ func (c *circuitBreakerStore) DeleteTagCircuitBreaker(id string, version string)
 func (c *circuitBreakerStore) DeleteMasterCircuitBreaker(id string) error {
 	return c.master.processWithTransaction(labelDeleteCircuitBreakerRuleOld, func(tx *BaseTx) error {
 		// 需要保证所有已标记的规则无绑定服务
-		str := `update circuitbreaker_rule set flag = 1, mtime = $1
-			where id = $2 and version = 'master'
-			and id not in 
-			(select DISTINCT(rule_id) from circuitbreaker_rule_relation 
-				where rule_id = $3 and flag = 0)`
+		str := "update circuitbreaker_rule set flag = 1, mtime = $1 where id = $2 " +
+			"and version = 'master' and id not in (select DISTINCT(rule_id) " +
+			"from circuitbreaker_rule_relation where rule_id = $3 and flag = 0)"
 		log.Infof("[Store][CircuitBreaker] delete master rule(%s) sql(%s)", id, str)
 		stmt, err := tx.Prepare(str)
 		if err != nil {
@@ -270,9 +263,9 @@ func (c *circuitBreakerStore) DeleteMasterCircuitBreaker(id string) error {
 // @note 只允许修改master熔断规则
 func (c *circuitBreakerStore) UpdateCircuitBreaker(cb *model.CircuitBreaker) error {
 	return c.master.processWithTransaction(labelUpdateCircuitBreakerRuleOld, func(tx *BaseTx) error {
-		str := `update circuitbreaker_rule set business = $1, department = $2, comment = $3,
-			inbounds = $4, outbounds = $5, token = $6, owner = $7, revision = $8, mtime = $9 
-			where id = $10 and version = $11`
+		str := "update circuitbreaker_rule set business = $1, department = $2, comment = $3, " +
+			"inbounds = $4, outbounds = $5, token = $6, owner = $7, revision = $8, mtime = $9 " +
+			"where id = $10 and version = $11"
 		stmt, err := tx.Prepare(str)
 		if err != nil {
 			return err
@@ -295,10 +288,9 @@ func (c *circuitBreakerStore) UpdateCircuitBreaker(cb *model.CircuitBreaker) err
 
 // GetCircuitBreaker 获取熔断规则
 func (c *circuitBreakerStore) GetCircuitBreaker(id, version string) (*model.CircuitBreaker, error) {
-	str := `select id, version, name, namespace, business, department, COALESCE(comment, ""),
-			inbounds, outbounds, token, owner, revision, flag, ctime, mtime 
-			from circuitbreaker_rule 
-			where id = $1 and version = $2 and flag = 0`
+	str := "select id, version, name, namespace, business, department, COALESCE(comment, \"\"), " +
+		"inbounds, outbounds, token, owner, revision, flag, ctime, mtime from circuitbreaker_rule " +
+		"where id = $1 and version = $2 and flag = 0"
 	rows, err := c.master.Query(str, id, version)
 	if err != nil {
 		log.Errorf("[Store][CircuitBreaker] query circuitbreaker_rule with id(%s) and version(%s) err: %s",
@@ -322,7 +314,7 @@ func (c *circuitBreakerStore) GetCircuitBreaker(id, version string) (*model.Circ
 func (c *circuitBreakerStore) GetCircuitBreakerRelation(ruleID, ruleVersion string) (
 	[]*model.CircuitBreakerRelation, error) {
 	str := genQueryCircuitBreakerRelation()
-	str += `where rule_id = $1 and rule_version = $2 and flag = 0`
+	str += "where rule_id = $1 and rule_version = $2 and flag = 0"
 	rows, err := c.master.Query(str, ruleID, ruleVersion)
 	if err != nil {
 		log.Errorf("[Store][CircuitBreaker] query circuitbreaker_rule_relation "+
@@ -343,7 +335,7 @@ func (c *circuitBreakerStore) GetCircuitBreakerRelation(ruleID, ruleVersion stri
 func (c *circuitBreakerStore) GetCircuitBreakerMasterRelation(ruleID string) (
 	[]*model.CircuitBreakerRelation, error) {
 	str := genQueryCircuitBreakerRelation()
-	str += `where rule_id = $1 and flag = 0`
+	str += "where rule_id = $1 and flag = 0"
 	rows, err := c.master.Query(str, ruleID)
 	if err != nil {
 		log.Errorf("[Store][CircuitBreaker] query circuitbreaker_rule_relation with rule_id(%s) err: %s",
@@ -363,10 +355,10 @@ func (c *circuitBreakerStore) GetCircuitBreakerMasterRelation(ruleID string) (
 func (c *circuitBreakerStore) GetCircuitBreakerForCache(mtime time.Time, firstUpdate bool) (
 	[]*model.ServiceWithCircuitBreaker, error) {
 	str := genQueryCircuitBreakerWithServiceID()
-	str += `where circuitbreaker_rule_relation.mtime > $1 and rule_id = id and rule_version = version
-			and circuitbreaker_rule.flag = 0`
+	str += "where circuitbreaker_rule_relation.mtime > $1 and rule_id = id " +
+		"and rule_version = version and circuitbreaker_rule.flag = 0"
 	if firstUpdate {
-		str += ` and circuitbreaker_rule_relation.flag != 1`
+		str += " and circuitbreaker_rule_relation.flag != 1"
 	}
 	rows, err := c.slave.Query(str, mtime)
 	if err != nil {
@@ -383,7 +375,7 @@ func (c *circuitBreakerStore) GetCircuitBreakerForCache(mtime time.Time, firstUp
 
 // GetCircuitBreakerVersions 获取熔断规则的所有版本
 func (c *circuitBreakerStore) GetCircuitBreakerVersions(id string) ([]string, error) {
-	str := `select version from circuitbreaker_rule where id = $1 and flag = 0 order by mtime desc`
+	str := "select version from circuitbreaker_rule where id = $1 and flag = 0 order by mtime desc"
 	rows, err := c.master.Query(str, id)
 	if err != nil {
 		log.Errorf("[Store][CircuitBreaker] get circuit breaker(%s) versions query err: %s", id, err.Error())
@@ -412,10 +404,10 @@ func (c *circuitBreakerStore) GetCircuitBreakerVersions(id string) ([]string, er
 func (c *circuitBreakerStore) ListMasterCircuitBreakers(filters map[string]string, offset uint32, limit uint32) (
 	*model.CircuitBreakerDetail, error) {
 	// 获取master熔断规则
-	selectStr := `select rule.id, rule.version, rule.name, rule.namespace, rule.business,
-				rule.department, rule.comment, rule.inbounds, rule.outbounds, rule.owner, 
-				rule.revision, rule.ctime, rule.mtime from circuitbreaker_rule as rule `
-	countStr := `select count(*) from circuitbreaker_rule as rule `
+	selectStr := "select rule.id, rule.version, rule.name, rule.namespace, rule.business, rule.department, " +
+		"rule.comment, rule.inbounds, rule.outbounds, rule.owner, rule.revision, rule.ctime, " +
+		"rule.mtime from circuitbreaker_rule as rule "
+	countStr := "select count(*) from circuitbreaker_rule as rule "
 	whereStr := "where rule.version = 'master' and rule.flag = 0 "
 	orderStr := "order by rule.mtime desc "
 	pageStr := "limit $%d offset $%d "
@@ -481,13 +473,13 @@ func (c *circuitBreakerStore) ListMasterCircuitBreakers(filters map[string]strin
 // ListReleaseCircuitBreakers 获取已发布规则及服务
 func (c *circuitBreakerStore) ListReleaseCircuitBreakers(filters map[string]string, offset, limit uint32) (
 	*model.CircuitBreakerDetail, error) {
-	selectStr := `select rule_id, rule_version, relation.ctime, relation.mtime,
-				name, namespace, service.owner from circuitbreaker_rule_relation as relation, service `
-	whereStr := `where relation.flag = 0 and relation.service_id = service.id `
+	selectStr := "select rule_id, rule_version, relation.ctime, relation.mtime, name, namespace, service.owner " +
+		"from circuitbreaker_rule_relation as relation, service "
+	whereStr := "where relation.flag = 0 and relation.service_id = service.id "
 	orderStr := "order by relation.mtime desc "
 	pageStr := "limit $%d offset $%d"
 
-	countStr := `select count(*) from circuitbreaker_rule_relation as relation where relation.flag = 0 `
+	countStr := "select count(*) from circuitbreaker_rule_relation as relation where relation.flag = 0 "
 
 	var (
 		args  []interface{}
@@ -555,13 +547,12 @@ func (c *circuitBreakerStore) ListReleaseCircuitBreakers(filters map[string]stri
 // GetCircuitBreakersByService 根据服务获取熔断规则
 func (c *circuitBreakerStore) GetCircuitBreakersByService(name string, namespace string) (
 	*model.CircuitBreaker, error) {
-	str := `select rule.id, rule.version, rule.name, rule.namespace, rule.business, rule.comment, 
-       		rule.department, rule.inbounds, rule.outbounds, rule.owner, rule.revision, rule.ctime, rule.mtime 
-			from circuitbreaker_rule as rule, circuitbreaker_rule_relation as relation, service 
-			where service.id = relation.service_id 
-			and relation.rule_id = rule.id and relation.rule_version = rule.version
-			and relation.flag = 0 and service.flag = 0 and rule.flag = 0 
-			and service.name = $1 and service.namespace = $2`
+	str := "select rule.id, rule.version, rule.name, rule.namespace, rule.business, rule.comment, " +
+		"rule.department, rule.inbounds, rule.outbounds, rule.owner, rule.revision, rule.ctime, " +
+		"rule.mtime from circuitbreaker_rule as rule, circuitbreaker_rule_relation as relation, service " +
+		"where service.id = relation.service_id and relation.rule_id = rule.id and " +
+		"relation.rule_version = rule.version and relation.flag = 0 and service.flag = 0 " +
+		"and rule.flag = 0 and service.name = $1 and service.namespace = $2"
 	var breaker model.CircuitBreaker
 	err := c.master.QueryRow(str, name, namespace).Scan(&breaker.ID, &breaker.Version, &breaker.Name,
 		&breaker.Namespace, &breaker.Business, &breaker.Comment, &breaker.Department, &breaker.Inbounds,
@@ -581,7 +572,7 @@ func (c *circuitBreakerStore) GetCircuitBreakersByService(name string, namespace
 // cleanCircuitBreakerRelation 清理无效的熔断规则关系
 func (c *circuitBreakerStore) cleanCircuitBreakerRelation(cbr *model.CircuitBreakerRelation) error {
 	log.Infof("[Store][CircuitBreaker] clean relation for service(%s)", cbr.ServiceID)
-	str := `delete from circuitbreaker_rule_relation where service_id = $1 and flag = 1`
+	str := "delete from circuitbreaker_rule_relation where service_id = $1 and flag = 1"
 	stmt, err := c.master.Prepare(str)
 	if err != nil {
 		return err
@@ -597,7 +588,7 @@ func (c *circuitBreakerStore) cleanCircuitBreakerRelation(cbr *model.CircuitBrea
 
 // cleanCircuitBreaker 彻底清理熔断规则
 func cleanCircuitBreaker(tx *BaseTx, id string, version string) error {
-	str := `delete from circuitbreaker_rule where id = $1 and version = $2 and flag = 1`
+	str := "delete from circuitbreaker_rule where id = $1 and version = $2 and flag = 1"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return store.Error(err)
@@ -706,18 +697,17 @@ func fetchCircuitBreakerAndServiceRows(rows *sql.Rows) ([]*model.ServiceWithCirc
 
 // genQueryCircuitBreakerRelation 查询熔断规则绑定关系表的语句
 func genQueryCircuitBreakerRelation() string {
-	str := `select service_id, rule_id, rule_version, flag, ctime, mtime
-			from circuitbreaker_rule_relation `
+	str := "select service_id, rule_id, rule_version, flag, ctime, mtime " +
+		"from circuitbreaker_rule_relation "
 	return str
 }
 
 // genQueryCircuitBreakerWithServiceID 根据服务id查询熔断规则的查询语句
 func genQueryCircuitBreakerWithServiceID() string {
-	str := `select service_id, rule_id, rule_version, circuitbreaker_rule_relation.flag,
-			circuitbreaker_rule_relation.ctime, circuitbreaker_rule_relation.mtime, 
-			name, namespace, business, department, comment, inbounds, outbounds, 
-			token, owner, revision, circuitbreaker_rule.flag, 
-			circuitbreaker_rule.ctime, circuitbreaker_rule.mtime 
-			from circuitbreaker_rule_relation, circuitbreaker_rule `
+	str := "select service_id, rule_id, rule_version, circuitbreaker_rule_relation.flag, " +
+		"circuitbreaker_rule_relation.ctime, circuitbreaker_rule_relation.mtime, name, " +
+		"namespace, business, department, comment, inbounds, outbounds, token, owner, " +
+		"revision, circuitbreaker_rule.flag, circuitbreaker_rule.ctime, circuitbreaker_rule.mtime " +
+		"from circuitbreaker_rule_relation, circuitbreaker_rule "
 	return str
 }

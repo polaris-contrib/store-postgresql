@@ -157,25 +157,25 @@ func (l5 *l5Store) GetMoreL5IPConfigs(flow uint32) ([]*model.IPConfig, error) {
 
 // getL5RouteSelectSQL 生成L5 Route的select sql语句
 func getL5RouteSelectSQL() string {
-	str := `select Fip, FmodId, FcmdId, FsetId, COALESCE(Fflag, 0), Fflow from t_route`
+	str := "select Fip, FmodId, FcmdId, FsetId, COALESCE(Fflag, 0), Fflow from t_route"
 	return str
 }
 
 // getL5PolicySelectSQL 生成L5 Policy的select sql语句
 func getL5PolicySelectSQL() string {
-	str := `select FmodId, Fdiv, Fmod, COALESCE(Fflag, 0), Fflow from t_policy`
+	str := "select FmodId, Fdiv, Fmod, COALESCE(Fflag, 0), Fflow from t_policy"
 	return str
 }
 
 // getL5SectionSelectSQL 生成L5 Section的select sql语句
 func getL5SectionSelectSQL() string {
-	str := `select FmodId, Ffrom, Fto, Fxid, COALESCE(Fflag, 0), Fflow from t_section`
+	str := "select FmodId, Ffrom, Fto, Fxid, COALESCE(Fflag, 0), Fflow from t_section"
 	return str
 }
 
 // getL5IPConfigSelectSQL 生成L5 IPConfig的select sql语句
 func getL5IPConfigSelectSQL() string {
-	str := `select Fip, FareaId, FcityId, FidcId, COALESCE(Fflag, 0), Fflow from t_ip_config`
+	str := "select Fip, FareaId, FcityId, FidcId, COALESCE(Fflag, 0), Fflow from t_ip_config"
 	return str
 }
 

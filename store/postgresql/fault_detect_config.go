@@ -42,28 +42,26 @@ const (
 )
 
 const (
-	insertFaultDetectSql = `insert into fault_detect_rule(
-			id, name, namespace, revision, description, dst_service, dst_namespace, dst_method, config, ctime, mtime)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9, $10,$11)`
+	insertFaultDetectSql = "insert into fault_detect_rule(id, name, namespace, revision, description, " +
+		"dst_service, dst_namespace, dst_method, config, ctime, mtime) " +
+		"values($1,$2,$3,$4,$5,$6,$7,$8,$9, $10,$11)"
 
-	updateFaultDetectSql = `update fault_detect_rule set name = $1, namespace = $2, revision = $3, description = $4,
-			dst_service = $5, dst_namespace = $6, dst_method = $7, config = $8, mtime = $9 where id = $10`
+	updateFaultDetectSql = "update fault_detect_rule set name = $1, namespace = $2, revision = $3, " +
+		"description = $4, dst_service = $5, dst_namespace = $6, dst_method = $7, " +
+		"config = $8, mtime = $9 where id = $10"
 
-	deleteFaultDetectSql = `update fault_detect_rule set flag = 1, mtime = $1 where id = $2`
+	deleteFaultDetectSql = "update fault_detect_rule set flag = 1, mtime = $1 where id = $2"
 
-	countFaultDetectSql = `select count(*) from fault_detect_rule where flag = 0`
+	countFaultDetectSql = "select count(*) from fault_detect_rule where flag = 0"
 
-	queryFaultDetectFullSql = `select id, name, namespace, revision, description, dst_service, 
-			dst_namespace, dst_method, config, ctime, mtime
-            from fault_detect_rule where flag = 0`
+	queryFaultDetectFullSql = "select id, name, namespace, revision, description, dst_service, " +
+		"dst_namespace, dst_method, config, ctime, mtime from fault_detect_rule where flag = 0"
 
-	queryFaultDetectBriefSql = `select id, name, namespace, revision, description, dst_service, 
-			dst_namespace, dst_method, ctime, mtime
-            from fault_detect_rule where flag = 0`
+	queryFaultDetectBriefSql = "select id, name, namespace, revision, description, dst_service, " +
+		"dst_namespace, dst_method, ctime, mtime from fault_detect_rule where flag = 0"
 
-	queryFaultDetectCacheSql = `select id, name, namespace, revision, description, dst_service, 
-			dst_namespace, dst_method, config, flag, ctime, mtime
-			from fault_detect_rule where mtime > $1`
+	queryFaultDetectCacheSql = "select id, name, namespace, revision, description, dst_service, " +
+		"dst_namespace, dst_method, config, flag, ctime, mtime from fault_detect_rule where mtime > $1"
 )
 
 // CreateFaultDetectRule create fault detect rule

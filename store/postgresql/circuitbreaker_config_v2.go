@@ -37,34 +37,32 @@ const (
 )
 
 const (
-	insertCircuitBreakerRuleSql = `insert into circuitbreaker_rule_v2(
-			id, name, namespace, enable, revision, description, level, src_service, src_namespace, 
-			dst_service, dst_namespace, dst_method, config, ctime, mtime, etime)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, $14,$15, %s)`
+	insertCircuitBreakerRuleSql = "insert into circuitbreaker_rule_v2(id, name, namespace, enable, revision, " +
+		"description, level, src_service, src_namespace, dst_service, dst_namespace, dst_method, " +
+		"config, ctime, mtime, etime) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, $14,$15, %s)"
 
-	updateCircuitBreakerRuleSql = `update circuitbreaker_rule_v2 set name = $1, namespace=$2, enable = $3, revision= $4,
-			description = $5, level = $6, src_service = $7, src_namespace = $8,
-            dst_service = $9, dst_namespace = $10, dst_method = $11,
-			config = $12, mtime = $13, etime=%s where id = $14`
+	updateCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set name = $1, namespace=$2, enable = $3, " +
+		"revision= $4, description = $5, level = $6, src_service = $7, src_namespace = $8, dst_service = $9, " +
+		"dst_namespace = $10, dst_method = $11, config = $12, mtime = $13, etime=%s where id = $14"
 
-	deleteCircuitBreakerRuleSql = `update circuitbreaker_rule_v2 set flag = 1, mtime = $1 where id = $2`
+	deleteCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set flag = 1, mtime = $1 where id = $2"
 
-	enableCircuitBreakerRuleSql = `update circuitbreaker_rule_v2 set enable = $1, revision = $2, mtime = $3, 
-			etime=%s where id = $4`
+	enableCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set enable = $1, revision = $2, mtime = $3, " +
+		"etime=%s where id = $4"
 
-	countCircuitBreakerRuleSql = `select count(*) from circuitbreaker_rule_v2 where flag = 0`
+	countCircuitBreakerRuleSql = "select count(*) from circuitbreaker_rule_v2 where flag = 0"
 
-	queryCircuitBreakerRuleFullSql = `select id, name, namespace, enable, revision, description, level, src_service, 
-			src_namespace, dst_service, dst_namespace, dst_method, config, ctime, mtime, etime 
-			from circuitbreaker_rule_v2 where flag = 0`
+	queryCircuitBreakerRuleFullSql = "select id, name, namespace, enable, revision, description, level, " +
+		"src_service, src_namespace, dst_service, dst_namespace, dst_method, config, ctime, mtime, etime " +
+		"from circuitbreaker_rule_v2 where flag = 0"
 
-	queryCircuitBreakerRuleBriefSql = `select id, name, namespace, enable, revision, level, src_service, src_namespace, 
-			dst_service, dst_namespace, dst_method, ctime, mtime, etime
-			from circuitbreaker_rule_v2 where flag = 0`
+	queryCircuitBreakerRuleBriefSql = "select id, name, namespace, enable, revision, level, src_service, " +
+		"src_namespace, dst_service, dst_namespace, dst_method, ctime, mtime, etime " +
+		"from circuitbreaker_rule_v2 where flag = 0"
 
-	queryCircuitBreakerRuleCacheSql = `select id, name, namespace, enable, revision, description, level, src_service, 
-			src_namespace, dst_service, dst_namespace, dst_method, config, flag, ctime, mtime, etime 
-			from circuitbreaker_rule_v2 where mtime > $1`
+	queryCircuitBreakerRuleCacheSql = "select id, name, namespace, enable, revision, description, " +
+		"level, src_service, src_namespace, dst_service, dst_namespace, dst_method, config, flag, " +
+		"ctime, mtime, etime from circuitbreaker_rule_v2 where mtime > $1"
 )
 
 func (c *circuitBreakerStore) CreateCircuitBreakerRule(cbRule *model.CircuitBreakerRule) error {

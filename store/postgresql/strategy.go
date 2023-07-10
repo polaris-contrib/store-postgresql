@@ -454,19 +454,11 @@ func (s *strategyStore) GetDefaultStrategyDetailByPrincipal(principalId string,
 			"get auth_strategy missing some params, principal_id is %s", principalId))
 	}
 
-	querySql := `
-	 SELECT ag.id, ag.name, ag.action, ag.owner, ag.default
-		 , ag.comment, ag.revision, ag.flag, ag.ctime, ag.mtime)
-	 FROM auth_strategy ag
-	 WHERE ag.flag = 0
-		 AND ag.default = 1
-		 AND ag.id IN (
-			 SELECT DISTINCT strategy_id
-			 FROM auth_principal
-			 WHERE principal_id = $1
-				 AND principal_role = $2
-		 )
-	 `
+	querySql := "SELECT ag.id, ag.name, ag.action, ag.owner, ag.default, ag.comment, " +
+		"ag.revision, ag.flag, ag.ctime, ag.mtime) FROM auth_strategy ag " +
+		"WHERE ag.flag = 0 AND ag.default = 1 AND ag.id IN " +
+		"(SELECT DISTINCT strategy_id FROM auth_principal " +
+		"WHERE principal_id = $1 AND principal_role = $2)"
 
 	row := s.master.QueryRow(querySql, principalId, int(principalType))
 	return s.getStrategyDetail(row)
@@ -520,33 +512,13 @@ func (s *strategyStore) GetStrategies(filters map[string]string, offset uint32, 
 func (s *strategyStore) listStrategies(filters map[string]string, offset uint32, limit uint32,
 	showDetail bool) (uint32, []*model.StrategyDetail, error) {
 
-	querySql :=
-		`SELECT
-			 ag.id,
-			 ag.name,
-			 ag.action,
-			 ag.owner,
-			 ag.comment,
-			 ag.default,
-			 ag.revision,
-			 ag.flag,
-			 ag.ctime,
-			 ag.mtime
-		   FROM
-			 (
-			   auth_strategy ag
-			   LEFT JOIN auth_strategy_resource ar ON ag.id = ar.strategy_id
-			 )
-			 LEFT JOIN auth_principal ap ON ag.id = ap.strategy_id `
-	countSql := `
-	 SELECT COUNT(DISTINCT ag.id)
-	 FROM
-	   (
-		 auth_strategy ag
-		 LEFT JOIN auth_strategy_resource ar ON ag.id = ar.strategy_id
-	   )
-	   LEFT JOIN auth_principal ap ON ag.id = ap.strategy_id
-	 `
+	querySql := "SELECT ag.id,ag.name,ag.action,ag.owner,ag.comment,ag.default,ag.revision," +
+		"ag.flag,ag.ctime,ag.mtime FROM (auth_strategy ag " +
+		"LEFT JOIN auth_strategy_resource ar ON ag.id = ar.strategy_id) " +
+		"LEFT JOIN auth_principal ap ON ag.id = ap.strategy_id "
+	countSql := "SELECT COUNT(DISTINCT ag.id) FROM(auth_strategy ag " +
+		"LEFT JOIN auth_strategy_resource ar ON ag.id = ar.strategy_id) " +
+		"LEFT JOIN auth_principal ap ON ag.id = ap.strategy_id"
 
 	return s.queryStrategies(s.master.Query, filters, RuleFilters, querySql, countSql,
 		offset, limit, showDetail)
@@ -869,21 +841,11 @@ func (s *strategyStore) cleanInvalidStrategy(name, owner string) error {
 func cleanLinkStrategy(tx *BaseTx, role model.PrincipalType, principalId, owner string) error {
 
 	// 清理默认策略对应的所有鉴权关联资源
-	removeResSql := `
-		 DELETE FROM auth_strategy_resource
-		 WHERE strategy_id IN (
-				 SELECT DISTINCT ag.id
-				 FROM auth_strategy ag
-				 WHERE ag.default = 1
-					 AND ag.owner = $1
-					 AND ag.id IN (
-						 SELECT DISTINCT strategy_id
-						 FROM auth_principal
-						 WHERE principal_id = $2
-							 AND principal_role = $3
-					 )
-			 )
-		 `
+	removeResSql := "DELETE FROM auth_strategy_resource " +
+		"WHERE strategy_id IN (SELECT DISTINCT ag.id " +
+		"FROM auth_strategy ag WHERE ag.default = 1 AND ag.owner = $1 " +
+		"AND ag.id IN (SELECT DISTINCT strategy_id FROM auth_principal " +
+		"WHERE principal_id = $2 AND principal_role = $3))"
 	stmt, err := tx.Prepare(removeResSql)
 	if err != nil {
 		return err
@@ -893,18 +855,10 @@ func cleanLinkStrategy(tx *BaseTx, role model.PrincipalType, principalId, owner 
 	}
 
 	// 清理默认策略
-	cleanaRuleSql := `
-		 UPDATE auth_strategy AS ag
-		 SET ag.flag = 1
-		 WHERE ag.id IN (
-				 SELECT DISTINCT strategy_id
-				 FROM auth_principal
-				 WHERE principal_id = $1
-					 AND principal_role = $2
-			 )
-			 AND ag.default = 1
-			 AND ag.owner = $3
-	 `
+	cleanaRuleSql := "UPDATE auth_strategy AS ag SET ag.flag = 1 " +
+		"WHERE ag.id IN (SELECT DISTINCT strategy_id FROM auth_principal " +
+		"WHERE principal_id = $1 AND principal_role = $2) " +
+		"AND ag.default = 1 AND ag.owner = $3"
 	stmt, err = tx.Prepare(cleanaRuleSql)
 	if err != nil {
 		return err

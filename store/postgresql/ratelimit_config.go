@@ -207,7 +207,7 @@ func (rls *rateLimitStore) deleteRateLimit(limit *model.RateLimit) error {
 		_ = tx.Rollback()
 	}()
 
-	str := `update ratelimit_config set flag = 1, mtime = $1 where id = $2`
+	str := "update ratelimit_config set flag = 1, mtime = $1 where id = $2"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -231,9 +231,9 @@ func (rls *rateLimitStore) GetRateLimitWithID(id string) (*model.RateLimit, erro
 		return nil, errors.New("get rate limit missing some params")
 	}
 
-	str := `select id, name, disable, service_id, method, labels, priority, rule, 
-       		revision, flag, ctime, mtime, etime
-			from ratelimit_config where id = $1 and flag = 0`
+	str := "select id, name, disable, service_id, method, labels, priority, " +
+		"rule, revision, flag, ctime, mtime, etime " +
+		"from ratelimit_config where id = $1 and flag = 0"
 	rows, err := rls.master.Query(str, id)
 	if err != nil {
 		log.Errorf("[Store][database] query rate limit with id(%s) err: %s", id, err.Error())
@@ -279,10 +279,9 @@ func fetchRateLimitRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 // GetRateLimitsForCache 根据修改时间拉取增量限流规则及最新版本号
 func (rls *rateLimitStore) GetRateLimitsForCache(mtime time.Time,
 	firstUpdate bool) ([]*model.RateLimit, error) {
-	str := `select id, name, disable, ratelimit_config.service_id, method, labels, priority, rule, revision, flag,
-			ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime 
-			from ratelimit_config 
-			where ratelimit_config.mtime > $1`
+	str := "select id, name, disable, ratelimit_config.service_id, method, labels, priority, " +
+		"rule, revision, flag, ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime " +
+		"from ratelimit_config where ratelimit_config.mtime > $1"
 	if firstUpdate {
 		str += " and flag != 1"
 	}
@@ -360,10 +359,10 @@ func (rls *rateLimitStore) GetExtendRateLimits(
 // getBriefRateLimits 获取列表的概要信息
 func (rls *rateLimitStore) getBriefRateLimits(
 	filter map[string]string, offset uint32, limit uint32) ([]*model.ExtendRateLimit, error) {
-	str := `select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable,
-            ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.ctime, 
-			ratelimit_config.mtime, ratelimit_config.etime 
-			from ratelimit_config where ratelimit_config.flag = 0`
+	str := "select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable, " +
+		"ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.ctime, " +
+		"ratelimit_config.mtime, ratelimit_config.etime from ratelimit_config " +
+		"where ratelimit_config.flag = 0"
 
 	var index = 1
 	queryStr, args, index1 := genFilterRateLimitSQL(filter, index)
@@ -415,12 +414,11 @@ func fetchBriefRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) {
 // getExpandRateLimits 根据过滤条件获取限流规则
 func (rls *rateLimitStore) getExpandRateLimits(
 	filter map[string]string, offset uint32, limit uint32) ([]*model.ExtendRateLimit, error) {
-	str := `select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable,
-            ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.labels, 
-            ratelimit_config.priority, ratelimit_config.rule, ratelimit_config.revision, 
-            ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime 
-			from ratelimit_config 
-			where ratelimit_config.flag = 0`
+	str := "select ratelimit_config.id, ratelimit_config.name, ratelimit_config.disable, " +
+		"ratelimit_config.service_id, ratelimit_config.method, ratelimit_config.labels, " +
+		"ratelimit_config.priority, ratelimit_config.rule, ratelimit_config.revision, " +
+		"ratelimit_config.ctime, ratelimit_config.mtime, ratelimit_config.etime " +
+		"from ratelimit_config where ratelimit_config.flag = 0"
 
 	var index = 1
 	queryStr, args, index1 := genFilterRateLimitSQL(filter, index)
@@ -475,7 +473,7 @@ func fetchExpandRateLimitRows(rows *sql.Rows) ([]*model.ExtendRateLimit, error) 
 
 // getExpandRateLimitsCount 根据过滤条件获取限流规则数目
 func (rls *rateLimitStore) getExpandRateLimitsCount(filter map[string]string) (uint32, error) {
-	str := `select count(*) from ratelimit_config where ratelimit_config.flag = 0`
+	str := "select count(*) from ratelimit_config where ratelimit_config.flag = 0"
 
 	queryStr, args, _ := genFilterRateLimitSQL(filter, 1)
 	str = str + queryStr

@@ -200,7 +200,7 @@ func (t *transaction) DeleteAliasWithSourceID(sourceServiceID string) error {
 		return err
 	}
 
-	str := `update service set flag = 1, mtime = $1 where reference = $2`
+	str := "update service set flag = 1, mtime = $1 where reference = $2"
 	stmt, err := t.tx.Prepare(str)
 	if err != nil {
 		return err

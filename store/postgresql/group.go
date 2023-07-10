@@ -83,10 +83,8 @@ func (u *groupStore) addGroup(group *model.UserGroupDetail) error {
 		return store.Error(err)
 	}
 
-	addSql := `
-	  INSERT INTO user_group (id, name, owner, token, token_enable, comment, flag, ctime, mtime)
-	  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-	  `
+	addSql := "INSERT INTO user_group (id, name, owner, token, token_enable, comment, " +
+		"flag, ctime, mtime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
 	stmt, err := tx.Prepare(addSql)
 	if err != nil {
 		return err
@@ -254,12 +252,9 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 			"get usergroup missing some params, groupId is %s", groupId))
 	}
 
-	getSql := `
-	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, ug.mtime
-	  FROM user_group ug
-	  WHERE ug.flag = 0
-		  AND ug.id = $1 
-	  `
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
+		"ug.token_enable, ug.ctime, ug.mtime " +
+		"FROM user_group ug WHERE ug.flag = 0 AND ug.id = $1"
 	row := u.master.QueryRow(getSql, groupId)
 
 	group := &model.UserGroupDetail{
@@ -296,13 +291,9 @@ func (u *groupStore) GetGroupByName(name, owner string) (*model.UserGroup, error
 			"get usergroup missing some params, name=%s, owner=%s", name, owner))
 	}
 
-	getSql := `
-	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.ctime, ug.mtime
-	  FROM user_group ug
-	  WHERE ug.flag = 0
-		  AND ug.name = $1
-		  AND ug.owner = $2 
-	  `
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
+		"ug.ctime, ug.mtime FROM user_group ug " +
+		"WHERE ug.flag = 0 AND ug.name = $1 AND ug.owner = $2"
 	row := u.master.QueryRow(getSql, name, owner)
 
 	group := new(model.UserGroup)
@@ -346,12 +337,9 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 	filters = query
 
 	countSql := "SELECT COUNT(*) FROM user_group ug WHERE ug.flag = 0 "
-	getSql := `
-	  SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable
-		  , ug.ctime, ug.mtime, ug.flag
-	  FROM user_group ug
-	  WHERE ug.flag = 0 
-	  `
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
+		"ug.token_enable, ug.ctime, ug.mtime, ug.flag " +
+		"FROM user_group ug WHERE ug.flag = 0"
 
 	args := make([]interface{}, 0)
 	idx := 1

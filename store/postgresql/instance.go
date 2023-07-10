@@ -240,9 +240,9 @@ func (ins *instanceStore) BatchDeleteInstances(ids []interface{}) error {
 				if len(objects) == 0 {
 					return nil
 				}
-				str := fmt.Sprintf(`update instance set flag = 1, mtime = '%s'`, GetCurrentTimeFormat())
+				str := fmt.Sprintf("update instance set flag = 1, mtime = '%s'", GetCurrentTimeFormat())
 				placeholder, _ := PlaceholdersNI(len(objects), 1)
-				str += ` where id in ( ` + placeholder + `)`
+				str += " where id in ( " + placeholder + ")"
 				stmt, err := tx.Prepare(str)
 				if err != nil {
 					return err
@@ -316,9 +316,9 @@ func (ins *instanceStore) GetInstancesBrief(ids map[string]bool) (map[string]*mo
 	}
 
 	placeholder, _ := PlaceholdersNI(len(ids), 1)
-	str := `select instance.id, host, port, name, namespace, token, platform_id from service, instance
-		 where instance.flag = 0 and service.flag = 0 
-		 and service.id = instance.service_id and instance.id in (` + placeholder + ")"
+	str := "select instance.id, host, port, name, namespace, token, platform_id " +
+		"from service, instance where instance.flag = 0 and service.flag = 0 " +
+		"and service.id = instance.service_id and instance.id in (" + placeholder + ")"
 	args := make([]interface{}, 0, len(ids))
 	for key := range ids {
 		args = append(args, key)
@@ -444,12 +444,12 @@ func (ins *instanceStore) getExpandInstances(filter, metaFilter map[string]strin
 
 // getExpandInstancesCount 根据过滤条件查看对应服务实例的数目
 func (ins *instanceStore) getExpandInstancesCount(filter, metaFilter map[string]string) (uint32, error) {
-	str := `select count(*) from instance `
+	str := "select count(*) from instance "
 	// 查询条件是否有service表中的字段
 	_, isName := filter["name"]
 	_, isNamespace := filter["namespace"]
 	if isName || isNamespace {
-		str += `inner join service on instance.service_id = service.id `
+		str += "inner join service on instance.service_id = service.id "
 	}
 	str, args := genWhereSQLAndArgs(str, filter, metaFilter, nil, 0, 1)
 
@@ -974,9 +974,11 @@ func batchQueryMetadata(queryHandler QueryHandler, instances []interface{}) (*sq
 
 // addMainInstance 往instance主表中增加数据
 func addMainInstance(tx *BaseTx, instance *model.Instance) error {
-	str := `insert into instance(id, service_id, vpc_id, host, port, protocol, version, health_status, isolate,
-	 weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime)
-		 values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`
+	str := "insert into instance(id, service_id, vpc_id, host, port, protocol, " +
+		"version, health_status, isolate, weight, enable_health_check, logic_set, " +
+		"cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime) " +
+		"values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, " +
+		"$15, $16, $17, $18, $19)"
 	// 此语句暂时留存，ON CONFLICT误法仅支持postgreSQL-11以上的版本
 	/*str := `
 			INSERT INTO instance(id, service_id, vpc_id, host, port, protocol, version, health_status, isolate,
@@ -1016,9 +1018,10 @@ func addMainInstance(tx *BaseTx, instance *model.Instance) error {
 
 // batchAddMainInstances 批量增加main instance数据
 func batchAddMainInstances(tx *BaseTx, instances []*model.Instance) error {
-	str := `insert into instance(id, service_id, vpc_id, host, port, protocol, version, health_status, isolate,
-		 weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime) 
-		 values`
+	str := "insert into instance(id, service_id, vpc_id, host, port, protocol, " +
+		"version, health_status, isolate, weight, enable_health_check, " +
+		"logic_set, cmdb_region, cmdb_zone, cmdb_idc, priority, " +
+		"revision, ctime, mtime) values"
 	first := true
 	index := 1
 	args := make([]interface{}, 0)
@@ -1077,8 +1080,7 @@ func addInstanceCheck(tx *BaseTx, instance *model.Instance) error {
 			ON CONFLICT (id) DO
 			UPDATE
 	  		SET type = $4, ttl = $5`*/
-	str := `
-		INSERT INTO health_check (id, type, ttl) VALUES ($1, $2, $3)`
+	str := "INSERT INTO health_check (id, type, ttl) VALUES ($1, $2, $3)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1171,7 +1173,7 @@ func batchDeleteInstanceMeta(tx *BaseTx, instances []*model.Instance) error {
 		return nil
 	}
 
-	str := `delete from instance_metadata where id in (` + builder.String() + `)`
+	str := "delete from instance_metadata where id in (" + builder.String() + ")"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1252,10 +1254,10 @@ func updateInstanceCheck(tx *BaseTx, instance *model.Instance) error {
 
 // updateInstanceMain 更新instance主表
 func updateInstanceMain(tx *BaseTx, instance *model.Instance) error {
-	str := `update instance set protocol = $1, version = $2, health_status = $3, isolate = $4, 
-                    weight = $5, enable_health_check = $6, logic_set = $7, cmdb_region = $8, 
-                    cmdb_zone = $9, cmdb_idc = $10, priority = $11, revision = $12, mtime = $13
-                where id = $14`
+	str := "update instance set protocol = $1, version = $2, health_status = $3, " +
+		"isolate = $4, weight = $5, enable_health_check = $6, logic_set = $7, " +
+		"cmdb_region = $8, cmdb_zone = $9, cmdb_idc = $10, priority = $11, " +
+		"revision = $12, mtime = $13 where id = $14"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1430,39 +1432,35 @@ func fetchInstanceMetaRows(instances map[string]*model.Instance, rows *sql.Rows)
 
 // genInstanceSelectSQL 生成instance的select sql语句
 func genInstanceSelectSQL() string {
-	str := `select instance.id, service_id, vpc_id, host, port, protocol, version,
-			 health_status, isolate, weight, enable_health_check, logic_set, cmdb_region, 
-			 cmdb_zone, cmdb_idc, priority, revision, flag, COALESCE(health_check.type, -1), 
-			 COALESCE(health_check.ttl, 0), instance.ctime, instance.mtime   
-			 from instance left join health_check 
-			 on instance.id = health_check.id `
+	str := "select instance.id, service_id, vpc_id, host, port, protocol, version, " +
+		"health_status, isolate, weight, enable_health_check, logic_set, cmdb_region, " +
+		"cmdb_zone, cmdb_idc, priority, revision, flag, COALESCE(health_check.type, -1), " +
+		"COALESCE(health_check.ttl, 0), instance.ctime, instance.mtime from instance " +
+		"left join health_check on instance.id = health_check.id "
 	return str
 }
 
 // genCompleteInstanceSelectSQL 生成完整instance(主表+health_check+metadata)的sql语句
 func genCompleteInstanceSelectSQL() string {
-	str := `select instance.id, service_id, vpc_id, host, port, protocol, version, health_status, 
-       isolate, weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, priority, 
-       revision, flag, COALESCE(health_check.type, -1), COALESCE(health_check.ttl, 0), 
-       COALESCE(instance_metadata.id, ''), COALESCE(mkey, ''), COALESCE(mvalue, ''), 
-       instance.ctime, instance.mtime 
-		 from instance 
-		 left join health_check on instance.id = health_check.id 
-		 left join instance_metadata on instance.id = instance_metadata.id `
+	str := "select instance.id, service_id, vpc_id, host, port, protocol, version, health_status, " +
+		"isolate, weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, " +
+		"priority, revision, flag, COALESCE(health_check.type, -1), COALESCE(health_check.ttl, 0), " +
+		"COALESCE(instance_metadata.id, ''), COALESCE(mkey, ''), COALESCE(mvalue, ''), instance.ctime, " +
+		"instance.mtime from instance left join health_check on instance.id = health_check.id " +
+		"left join instance_metadata on instance.id = instance_metadata.id "
 	return str
 }
 
 // genExpandInstanceSelectSQL 生成expandInstance的select sql语句
 func genExpandInstanceSelectSQL(needForceIndex bool) string {
-	str := `select instance.id, service_id, vpc_id, host, port, protocol, version, health_status, 
-       			isolate, weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, 
-       			priority, instance.revision, instance.flag, COALESCE(health_check.type, -1), 
-       			COALESCE(health_check.ttl, 0), service.name, service.namespace, instance.ctime, 
-       			instance.mtime 
-			from (service inner join instance `
+	str := "select instance.id, service_id, vpc_id, host, port, protocol, version, health_status, " +
+		"isolate, weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, " +
+		"priority, instance.revision, instance.flag, COALESCE(health_check.type, -1), " +
+		"COALESCE(health_check.ttl, 0), service.name, service.namespace, instance.ctime, instance.mtime " +
+		"from (service inner join instance "
 	if needForceIndex {
-		str += `force index(service_id, host) `
+		str += "force index(service_id, host) "
 	}
-	str += `on service.id = instance.service_id) left join health_check on instance.id = health_check.id `
+	str += "on service.id = instance.service_id) left join health_check on instance.id = health_check.id "
 	return str
 }

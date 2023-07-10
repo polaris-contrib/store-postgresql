@@ -190,13 +190,9 @@ func (ss *serviceStore) updateServiceAlias(alias *model.Service, needUpdateOwner
 		_ = tx.Rollback()
 	}()
 
-	updateStmt := `
-		update 
-			service 
-		set 
-			name = $1, namespace = $2, reference = $3, comment = $4, token = $5, revision = $6, owner = $7, mtime = $8
-		where 
-			id = $9 and (select flag from (select flag from service where id = $10) as alias) = 0`
+	updateStmt := "update service set name = $1, namespace = $2, reference = $3, comment = $4, " +
+		"token = $5, revision = $6, owner = $7, mtime = $8 where id = $9 and " +
+		"(select flag from (select flag from service where id = $10) as alias) = 0"
 	stmt, err := tx.Prepare(updateStmt)
 	if err != nil {
 		return err
@@ -345,9 +341,9 @@ func (ss *serviceStore) GetService(name string, namespace string) (*model.Servic
 // GetSourceServiceToken 获取只获取服务token
 // 返回服务ID，服务token
 func (ss *serviceStore) GetSourceServiceToken(name string, namespace string) (*model.Service, error) {
-	str := `select id, token, platform_id from service
-			where name = $1 and namespace = $2 and flag = 0 
-			and (reference is null or reference = '')`
+	str := "select id, token, platform_id from service " +
+		"where name = $1 and namespace = $2 and flag = 0 " +
+		"and (reference is null or reference = '')"
 	var out model.Service
 	err := ss.master.QueryRow(str, name, namespace).Scan(&out.ID, &out.Token, &out.PlatformID)
 	switch {
@@ -467,13 +463,10 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 		return make([]*model.ServiceAlias, 0), nil
 	}
 
-	baseStr := `
-		select 
-			alias.id, alias.name, alias.namespace, alias.ctime, alias.mtime, 
-			alias.comment, source.id as sourceID, source.name as sourceName, source.namespace, alias.owner 
-		from 
-			service as alias inner join service as source 
-			on alias.reference = source.id and alias.flag != 1 `
+	baseStr := "select alias.id, alias.name, alias.namespace, alias.ctime, alias.mtime, " +
+		"alias.comment, source.id as sourceID, source.name as sourceName, source.namespace, " +
+		"alias.owner from service as alias inner join service as source on " +
+		"alias.reference = source.id and alias.flag != 1 "
 	order := &Order{"alias.mtime", "desc"}
 	indexSort := 1
 
@@ -507,12 +500,8 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 
 // getServiceAliasesCount 获取别名总数
 func (ss *serviceStore) getServiceAliasesCount(filter map[string]string) (uint32, error) {
-	baseStr := `
-		select 
-			count(*) 
-		from 
-			service as alias inner join service as source 
-			on alias.reference = source.id and alias.flag != 1 `
+	baseStr := "select count(*) from service as alias " +
+		"inner join service as source on alias.reference = source.id and alias.flag != 1 "
 	str, args := genServiceAliasWhereSQLAndArgs(baseStr, filter, nil, 0, 1, 1)
 	return queryEntryCount(ss.master, str, args)
 }
@@ -577,7 +566,7 @@ func (ss *serviceStore) getServices(sFilters, sMetas map[string]string, iFilters
 // getServicesCount 根据相关条件查询对应服务数目，不包括别名
 func (ss *serviceStore) getServicesCount(
 	sFilters, sMetas map[string]string, iFilters *store.InstanceArgs) (uint32, error) {
-	str := `select count(*) from service  where (reference is null or reference = '')`
+	str := "select count(*) from service  where (reference is null or reference = '')"
 	var args []interface{}
 	var indexSort = 0
 	if len(sMetas) > 0 {
@@ -965,12 +954,10 @@ func callFetchServiceMetaRows(rows *sql.Rows, handler func(id, key, value string
 // addServiceMain 增加service主表数据
 func addServiceMain(tx *BaseTx, s *model.Service) error {
 	// 先把主表填充
-	insertStmt := `
-		insert into service
-			(id, name, namespace, ports, business, department, cmdb_mod1, cmdb_mod2,
-			cmdb_mod3, comment, token, reference,  platform_id, revision, owner, ctime, mtime)
-		values
-			($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`
+	insertStmt := "insert into service(id, name, namespace, ports, business, department, " +
+		"cmdb_mod1, cmdb_mod2, cmdb_mod3, comment, token, reference,  platform_id, " +
+		"revision, owner, ctime, mtime) values($1, $2, $3, $4, $5, $6, $7, $8, $9, " +
+		"$10, $11, $12, $13, $14, $15, $16, $17)"
 	stmt, err := tx.Prepare(insertStmt)
 	if err != nil {
 		return err
@@ -1015,9 +1002,10 @@ func addServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 
 // updateServiceMain 更新service主表
 func updateServiceMain(tx *BaseTx, service *model.Service) error {
-	str := `update service set name = $1, namespace = $2, ports = $3, business = $4,
-	department = $5, cmdb_mod1 = $6, cmdb_mod2 = $7, cmdb_mod3 = $8, comment = $9, 
-	token = $10, platform_id = $11, revision = $12, owner = $13, mtime = $14 where id = $15`
+	str := "update service set name = $1, namespace = $2, ports = $3, business = $4, " +
+		"department = $5, cmdb_mod1 = $6, cmdb_mod2 = $7, cmdb_mod3 = $8, comment = $9, " +
+		"token = $10, platform_id = $11, revision = $12, owner = $13, mtime = $14 " +
+		"where id = $15"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1189,7 +1177,7 @@ func (ss *serviceStore) GetServicesBatch(services []*model.Service) ([]*model.Se
 	if len(services) == 0 {
 		return nil, nil
 	}
-	str := `select id, name, namespace,owner from service where flag = 0 and (name, namespace) in (`
+	str := "select id, name, namespace,owner from service where flag = 0 and (name, namespace) in ("
 	args := make([]interface{}, 0, len(services)*2)
 	idx := 1
 	for key, value := range services {
@@ -1202,7 +1190,7 @@ func (ss *serviceStore) GetServicesBatch(services []*model.Service) ([]*model.Se
 		args = append(args, value.Name)
 		args = append(args, value.Namespace)
 	}
-	str += `)`
+	str += ")"
 
 	rows, err := ss.master.Query(str, args...)
 	if err != nil {

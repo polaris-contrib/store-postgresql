@@ -53,8 +53,8 @@ func (rs *routingConfigStore) CreateRoutingConfig(conf *model.RoutingConfig) err
 			}
 
 			// 服务配置的创建由外层进行服务的保护，这里不需要加锁
-			str := `insert into routing_config(id, in_bounds, out_bounds, revision, ctime, mtime)
-			values($1,$2,$3,$4,$5,$6)`
+			str := "insert into routing_config(id, in_bounds, out_bounds, revision, " +
+				"ctime, mtime) values($1,$2,$3,$4,$5,$6)"
 			stmt, err := tx.Prepare(str)
 			if err != nil {
 				return store.Error(err)
@@ -87,7 +87,8 @@ func (rs *routingConfigStore) UpdateRoutingConfig(conf *model.RoutingConfig) err
 	}
 	return RetryTransaction("updateRoutingConfig", func() error {
 		return rs.master.processWithTransaction("updateRoutingConfig", func(tx *BaseTx) error {
-			str := `update routing_config set in_bounds = $1, out_bounds = $2, revision = $3, mtime = $4 where id = $5`
+			str := "update routing_config set in_bounds = $1, out_bounds = $2, " +
+				"revision = $3, mtime = $4 where id = $5"
 			stmt, err := tx.Prepare(str)
 			if err != nil {
 				return store.Error(err)
@@ -161,8 +162,8 @@ func (rs *routingConfigStore) DeleteRoutingConfigTx(tx store.Tx, serviceID strin
 // GetRoutingConfigsForCache 缓存增量拉取
 func (rs *routingConfigStore) GetRoutingConfigsForCache(mtime time.Time,
 	firstUpdate bool) ([]*model.RoutingConfig, error) {
-	str := `select id, in_bounds, out_bounds, revision,flag, ctime, mtime  
-			from routing_config where mtime > $1`
+	str := "select id, in_bounds, out_bounds, revision,flag, ctime, mtime " +
+		"from routing_config where mtime > $1"
 	if firstUpdate {
 		str += " and flag != 1"
 	}
@@ -182,9 +183,9 @@ func (rs *routingConfigStore) GetRoutingConfigsForCache(mtime time.Time,
 // GetRoutingConfigWithService 根据服务名+namespace获取对应的配置
 func (rs *routingConfigStore) GetRoutingConfigWithService(name string, namespace string) (*model.RoutingConfig, error) {
 	// 只查询到flag=0的数据
-	str := `select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime  
-			from (select id from service where name = $1 and namespace = $2) as service, routing_config 
-			where service.id = routing_config.id and routing_config.flag = 0`
+	str := "select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime " +
+		"from (select id from service where name = $1 and namespace = $2) as service, " +
+		"routing_config where service.id = routing_config.id and routing_config.flag = 0"
 	rows, err := rs.master.Query(str, name, namespace)
 	if err != nil {
 		log.Errorf("[Store][database] query routing config with service(%s, %s) err: %s",
@@ -206,9 +207,8 @@ func (rs *routingConfigStore) GetRoutingConfigWithService(name string, namespace
 
 // GetRoutingConfigWithID 根据服务ID获取对应的配置
 func (rs *routingConfigStore) GetRoutingConfigWithID(id string) (*model.RoutingConfig, error) {
-	str := `select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime
-			from routing_config 
-			where id = $1 and flag = 0`
+	str := "select routing_config.id, in_bounds, out_bounds, revision, flag, ctime, mtime " +
+		"from routing_config where id = $1 and flag = 0"
 	rows, err := rs.master.Query(str, id)
 	if err != nil {
 		log.Errorf("[Store][database] query routing with id(%s) err: %s", id, err.Error())
@@ -322,19 +322,16 @@ func fetchRoutingConfigRows(rows *sql.Rows) ([]*model.RoutingConfig, error) {
 
 // genQueryRoutingConfigSQL 查询路由配置的语句
 func genQueryRoutingConfigSQL() string {
-	str := `select name, namespace, routing_config.id, in_bounds, out_bounds,
-			routing_config.ctime, routing_config.mtime  
-			from routing_config, service 
-			where routing_config.id = service.id 
-			and routing_config.flag = 0`
+	str := "select name, namespace, routing_config.id, in_bounds, out_bounds, " +
+		"routing_config.ctime, routing_config.mtime from routing_config, service " +
+		"where routing_config.id = service.id and routing_config.flag = 0"
 	return str
 }
 
 // genQueryRoutingConfigCountSQL 获取路由配置指定过滤条件下的总条目数
 func genQueryRoutingConfigCountSQL() string {
-	str := `select count(*) from routing_config, service
-			where routing_config.id = service.id 
-			and routing_config.flag = 0`
+	str := "select count(*) from routing_config, service " +
+		"where routing_config.id = service.id and routing_config.flag = 0"
 	return str
 }
 

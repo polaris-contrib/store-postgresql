@@ -196,7 +196,8 @@ func (r *routingConfigStoreV2) EnableRouting(conf *model.RouterConfig) error {
 			etimeStr = emptyEnableTime
 		}
 
-		str := `update routing_config_v2 set enable = $1, revision = $2, mtime = $3, etime=$4 where id = $5`
+		str := "update routing_config_v2 set enable = $1, revision = $2, mtime = $3, " +
+			"etime=$4 where id = $5"
 		stmt, err := r.master.Prepare(str)
 		if err != nil {
 			return err
@@ -220,7 +221,7 @@ func (r *routingConfigStoreV2) DeleteRoutingConfigV2(ruleID string) error {
 		return store.NewStatusError(store.EmptyParamsErr, "missing service id")
 	}
 
-	str := `update routing_config_v2 set flag = 1, mtime = $1 where id = $2`
+	str := "update routing_config_v2 set flag = 1, mtime = $1 where id = $2"
 	stmt, err := r.master.Prepare(str)
 	if err != nil {
 		return store.Error(err)
@@ -236,9 +237,8 @@ func (r *routingConfigStoreV2) DeleteRoutingConfigV2(ruleID string) error {
 // GetRoutingConfigsV2ForCache Pull the incremental routing configuration information through mtime
 func (r *routingConfigStoreV2) GetRoutingConfigsV2ForCache(
 	mtime time.Time, firstUpdate bool) ([]*model.RouterConfig, error) {
-	str := `select id, name, policy, config, enable, revision, flag, 
-       priority, description, ctime, mtime, etime  
-	from routing_config_v2 where mtime > $1 `
+	str := "select id, name, policy, config, enable, revision, flag, priority, " +
+		"description, ctime, mtime, etime from routing_config_v2 where mtime > $1 "
 
 	if firstUpdate {
 		str += " and flag != 1"
@@ -283,10 +283,9 @@ func (r *routingConfigStoreV2) GetRoutingConfigV2WithIDTx(tx store.Tx, ruleID st
 
 func (r *routingConfigStoreV2) getRoutingConfigV2WithIDTx(tx *BaseTx, ruleID string) (*model.RouterConfig, error) {
 
-	str := `select id, name, policy, config, enable, revision, flag, priority, 
-       	description, ctime, mtime, etime
-		from routing_config_v2 
-		where id = $1 and flag = 0`
+	str := "select id, name, policy, config, enable, revision, flag, priority, " +
+		"description, ctime, mtime, etime from routing_config_v2 " +
+		"where id = $1 and flag = 0"
 	rows, err := tx.Query(str, ruleID)
 	if err != nil {
 		log.Errorf("[Store][database] query routing v2 with id(%s) err: %s", ruleID, err.Error())

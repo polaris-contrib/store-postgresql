@@ -169,7 +169,7 @@ func (ns *namespaceStore) GetMoreNamespaces(mtime time.Time) ([]*model.Namespace
 
 // getNamespacesCount 根据相关条件查询对应命名空间数目
 func (ns *namespaceStore) getNamespacesCount(filter map[string][]string) (uint32, error) {
-	str := `select count(*) from namespace `
+	str := "select count(*) from namespace "
 	str, args := genNamespaceWhereSQLAndArgs(str, filter, nil, 0, 1)
 
 	var count uint32
@@ -272,8 +272,7 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 
 // genNamespaceSelectSQL 生成namespace的查询语句
 func genNamespaceSelectSQL() string {
-	str := `select name, comment, token, owner, flag, ctime, mtime 
-			from namespace `
+	str := "select name, comment, token, owner, flag, ctime, mtime from namespace "
 	return str
 }
 
