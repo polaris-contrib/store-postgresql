@@ -564,7 +564,7 @@ func (u *groupStore) getGroupLinkUserIds(groupId string) (map[string]struct{}, e
 	ids := make(map[string]struct{})
 
 	// 拉取该分组下的所有 user
-	idRows, err := u.slave.Query("SELECT user_id FROM user u JOIN user_group_relation ug ON "+
+	idRows, err := u.slave.Query("SELECT user_id FROM \"user\" u JOIN user_group_relation ug ON "+
 		" u.id = ug.user_id WHERE ug.group_id = $1", groupId)
 	if err != nil {
 		return nil, err

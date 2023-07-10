@@ -252,7 +252,7 @@ func (u *userStore) deleteUser(user *model.User) error {
 // GetSubCount get user's sub count
 func (u *userStore) GetSubCount(user *model.User) (uint32, error) {
 	var (
-		countSql   = "SELECT COUNT(*) FROM user WHERE owner = $1 AND flag = 0"
+		countSql   = "SELECT COUNT(*) FROM \"user\" WHERE owner = $1 AND flag = 0"
 		count, err = queryEntryCount(u.master, countSql, []interface{}{user.ID})
 	)
 
@@ -324,7 +324,7 @@ func (u *userStore) GetUserByIds(ids []string) ([]*model.User, error) {
 
 	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
 		"u.token, u.token_enable, u.user_type, u.ctime , u.mtime, u.flag, u.mobile, " +
-		"u.email FROM user u WHERE u.flag = 0 AND u.id IN ("
+		"u.email FROM \"user\" u WHERE u.flag = 0 AND u.id IN ("
 
 	var idx = 1
 
@@ -377,9 +377,9 @@ func (u *userStore) GetUsers(filters map[string]string, offset uint32, limit uin
 // listUsers Query user list information
 func (u *userStore) listUsers(filters map[string]string, offset uint32, limit uint32) (uint32,
 	[]*model.User, error) {
-	countSql := "SELECT COUNT(*) FROM user WHERE flag = 0 "
+	countSql := "SELECT COUNT(*) FROM \"user\" WHERE flag = 0 "
 	getSql := "SELECT id, name, password, owner, comment, source, token, token_enable, " +
-		"user_type, ctime, mtime, flag, mobile, email FROM user WHERE flag = 0"
+		"user_type, ctime, mtime, flag, mobile, email FROM \"user\" WHERE flag = 0"
 
 	if val, ok := filters["hide_admin"]; ok && val == "true" {
 		delete(filters, "hide_admin")
