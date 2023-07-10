@@ -267,7 +267,7 @@ func (u *userStore) GetSubCount(user *model.User) (uint32, error) {
 func (u *userStore) GetUser(id string) (*model.User, error) {
 	var tokenEnable, userType int
 	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
-		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM user u " +
+		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM \"user\" u " +
 		"WHERE u.flag = 0 AND u.id = $1"
 	var (
 		row  = u.master.QueryRow(getSql, id)
@@ -292,7 +292,7 @@ func (u *userStore) GetUser(id string) (*model.User, error) {
 // GetUserByName 根据用户名、owner 获取用户
 func (u *userStore) GetUserByName(name, ownerId string) (*model.User, error) {
 	getSql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, " +
-		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM user u " +
+		"u.token, u.token_enable, u.user_type, u.mobile, u.email FROM \"user\" u " +
 		"WHERE u.flag = 0 AND u.name = $1 AND u.owner = $2"
 
 	var (
