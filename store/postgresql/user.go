@@ -501,7 +501,7 @@ func (u *userStore) GetUsersForCache(mtime time.Time, firstUpdate bool) ([]*mode
 	args := make([]interface{}, 0)
 	querySql := "SELECT u.id, u.name, u.password, u.owner, u.comment, u.source, u.token, " +
 		"u.token_enable, user_type, u.ctime, u.mtime, u.flag, u.mobile, u.email " +
-		"FROM user u"
+		"FROM \"user\" u"
 
 	if !firstUpdate {
 		querySql += " WHERE u.mtime >= $1 "
