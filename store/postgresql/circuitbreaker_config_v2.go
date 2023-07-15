@@ -319,7 +319,11 @@ func genCircuitBreakerRuleSQL(query map[string]string) (string, []interface{}, i
 		} else if key == "level" {
 			tokens := strings.Split(value, ",")
 			placeholder, idx1 := placeholders(len(tokens), idx)
-			idx = idx1
+			if idx1 > idx {
+				idx = idx1 - 1
+			} else {
+				idx = idx1
+			}
 			str += fmt.Sprintf(" and %s in (%s)", storeKey, placeholder)
 			for _, token := range tokens {
 				args = append(args, token)
