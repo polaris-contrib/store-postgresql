@@ -44,7 +44,7 @@ const (
 )
 
 var (
-	groupAttribute map[string]string = map[string]string{
+	groupAttribute = map[string]string{
 		"name":  "ug.name",
 		"id":    "ug.id",
 		"owner": "ug.owner",

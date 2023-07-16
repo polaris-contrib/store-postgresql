@@ -87,8 +87,8 @@ func (rh *configFileReleaseHistoryStore) QueryConfigFileReleaseHistories(namespa
 		queryParams = append(queryParams, endId)
 	}
 
-	countSql += fmt.Sprintf("group like $%d and file_name like $%d", idx, idx+1)
-	querySql += fmt.Sprintf("group like $%d and file_name like $%d order by id desc limit $%d offset $%d",
+	countSql += fmt.Sprintf("\"group\" like $%d and file_name like $%d", idx, idx+1)
+	querySql += fmt.Sprintf("\"group\" like $%d and file_name like $%d order by id desc limit $%d offset $%d",
 		idx+2, idx+3, idx+4, idx+5)
 	queryParams = append(queryParams, "%"+group+"%")
 	queryParams = append(queryParams, "%"+fileName+"%")
@@ -135,7 +135,7 @@ func (rh *configFileReleaseHistoryStore) GetLatestConfigFileReleaseHistory(names
 }
 
 func (rh *configFileReleaseHistoryStore) genSelectSql() string {
-	return "select id, name, namespace, group, file_name, content, comment, md5, format, tags, type, " +
+	return "select id, name, namespace, \"group\", file_name, content, comment, md5, format, tags, type, " +
 		" status, create_time, create_by, modify_time, " +
 		"modify_by from config_file_release_history "
 }

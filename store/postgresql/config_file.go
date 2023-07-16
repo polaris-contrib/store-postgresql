@@ -38,7 +38,7 @@ func (cf *configFileStore) CreateConfigFile(tx store.Tx, file *model.ConfigFile)
 	if err != nil {
 		return nil, err
 	}
-	createSql := "insert into config_file(name,namespace,group,content,comment,format,create_time, " +
+	createSql := "insert into config_file(name,namespace,\"group\",content,comment,format,create_time, " +
 		"create_by,modify_time,modify_by) values " +
 		"($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
 	if tx != nil {
@@ -66,7 +66,7 @@ func (cf *configFileStore) CreateConfigFile(tx store.Tx, file *model.ConfigFile)
 
 // GetConfigFile 获取配置文件
 func (cf *configFileStore) GetConfigFile(tx store.Tx, namespace, group, name string) (*model.ConfigFile, error) {
-	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and `group` = $2 and name = $3 and flag = 0"
+	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and \"group\" = $2 and name = $3 and flag = 0"
 	var rows *sql.Rows
 	var err error
 	if tx != nil {
@@ -100,7 +100,7 @@ func (cf *configFileStore) QueryConfigFilesByGroup(namespace, group string,
 		return 0, nil, err
 	}
 
-	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and `group` = $2 and flag = 0 order by id " +
+	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and \"group\" = $2 and flag = 0 order by id " +
 		" desc limit $3 offset $4"
 	rows, err := cf.master.Query(querySql, namespace, group, limit, offset)
 	if err != nil {
@@ -231,7 +231,7 @@ func (cf *configFileStore) CountByConfigFileGroup(namespace, group string) (uint
 }
 
 func (cf *configFileStore) CountConfigFileEachGroup() (map[string]map[string]int64, error) {
-	metricsSql := "SELECT namespace, group, count(name) FROM config_file WHERE flag = 0 GROUP by namespace, group"
+	metricsSql := "SELECT namespace, \"group\", count(name) FROM config_file WHERE flag = 0 GROUP by namespace, group"
 	rows, err := cf.slave.Query(metricsSql)
 	if err != nil {
 		return nil, store.Error(err)
