@@ -91,7 +91,7 @@ func (cf *configFileStore) GetConfigFile(tx store.Tx, namespace, group, name str
 func (cf *configFileStore) QueryConfigFilesByGroup(namespace, group string,
 	offset, limit uint32) (uint32, []*model.ConfigFile, error) {
 	var (
-		countSql = "select count(*) from config_file where namespace = $1 and group = $2 and flag = 0"
+		countSql = "select count(*) from config_file where namespace = $1 and \"group\" = $2 and flag = 0"
 		count    uint32
 		err      = cf.master.QueryRow(countSql, namespace, group).Scan(&count)
 	)
@@ -122,7 +122,7 @@ func (cf *configFileStore) QueryConfigFiles(namespace, group, name string,
 	if namespace == "" {
 		group = "%" + group + "%"
 		name = "%" + name + "%"
-		countSql := "select count(*) from config_file where group like $1 and name like $2 and flag = 0"
+		countSql := "select count(*) from config_file where \"group\" like $1 and name like $2 and flag = 0"
 
 		var count uint32
 		err := cf.master.QueryRow(countSql, group, name).Scan(&count)
@@ -130,7 +130,7 @@ func (cf *configFileStore) QueryConfigFiles(namespace, group, name string,
 			return 0, nil, err
 		}
 
-		querySql := cf.baseSelectConfigFileSql() + "where group like $1 and name like $2 and flag = 0 " +
+		querySql := cf.baseSelectConfigFileSql() + "where \"group\" like $1 and name like $2 and flag = 0 " +
 			" order by id desc limit $3 offset $4"
 		rows, err := cf.master.Query(querySql, group, name, limit, offset)
 		if err != nil {
@@ -148,7 +148,7 @@ func (cf *configFileStore) QueryConfigFiles(namespace, group, name string,
 	// 特定 namespace
 	group = "%" + group + "%"
 	name = "%" + name + "%"
-	countSql := "select count(*) from config_file where namespace = $1 and group like $2 and name like $3 and flag = 0"
+	countSql := "select count(*) from config_file where namespace = $1 and \"group\" like $2 and name like $3 and flag = 0"
 
 	var count uint32
 	err := cf.master.QueryRow(countSql, namespace, group, name).Scan(&count)
@@ -156,7 +156,7 @@ func (cf *configFileStore) QueryConfigFiles(namespace, group, name string,
 		return 0, nil, err
 	}
 
-	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and group like $2 and name like $3 " +
+	querySql := cf.baseSelectConfigFileSql() + "where namespace = $1 and \"group\" like $2 and name like $3 " +
 		" and flag = 0 order by id desc limit $4 offset $5"
 	rows, err := cf.master.Query(querySql, namespace, group, name, offset, limit)
 	if err != nil {
@@ -174,7 +174,7 @@ func (cf *configFileStore) QueryConfigFiles(namespace, group, name string,
 // UpdateConfigFile 更新配置文件
 func (cf *configFileStore) UpdateConfigFile(tx store.Tx, file *model.ConfigFile) (*model.ConfigFile, error) {
 	updateSql := "update config_file set content = $1 , comment = $2, format = $3, modify_time = $4, " +
-		" modify_by = $5 where namespace = $6 and group = $7 and name = $8"
+		" modify_by = $5 where namespace = $6 and \"group\" = $7 and name = $8"
 	var err error
 	if tx != nil {
 		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(updateSql)
@@ -199,7 +199,7 @@ func (cf *configFileStore) UpdateConfigFile(tx store.Tx, file *model.ConfigFile)
 
 // DeleteConfigFile 删除配置文件
 func (cf *configFileStore) DeleteConfigFile(tx store.Tx, namespace, group, name string) error {
-	deleteSql := "update config_file set flag = 1 where namespace = $1 and group = $2 and name = $3"
+	deleteSql := "update config_file set flag = 1 where namespace = $1 and \"group\" = $2 and name = $3"
 	var err error
 	if tx != nil {
 		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(deleteSql)
@@ -221,7 +221,7 @@ func (cf *configFileStore) DeleteConfigFile(tx store.Tx, namespace, group, name 
 }
 
 func (cf *configFileStore) CountByConfigFileGroup(namespace, group string) (uint64, error) {
-	countSql := "select count(*) from config_file where namespace = $1 and group = $2 and flag = 0"
+	countSql := "select count(*) from config_file where namespace = $1 and \"group\" = $2 and flag = 0"
 	var count uint64
 	err := cf.master.QueryRow(countSql, namespace, group).Scan(&count)
 	if err != nil {
@@ -262,14 +262,14 @@ func (cf *configFileStore) CountConfigFileEachGroup() (map[string]map[string]int
 }
 
 func (cf *configFileStore) baseSelectConfigFileSql() string {
-	return "select id, name,namespace,group,content,comment,format, create_time, " +
+	return "select id, name,namespace,\"group\",content,comment,format, create_time, " +
 		" create_by,modify_time,modify_by from config_file "
 }
 
 func (cf *configFileStore) hardDeleteConfigFile(namespace, group, name string) error {
 	log.Infof("[Config][Storage] delete config file. namespace = %s, group = %s, name = %s", namespace, group, name)
 
-	deleteSql := "delete from config_file where namespace = $1 and group = $2 and name = $3 and flag = 1"
+	deleteSql := "delete from config_file where namespace = $1 and \"group\" = $2 and name = $3 and flag = 1"
 	stmt, err := cf.master.Prepare(deleteSql)
 	if err != nil {
 		return store.Error(err)

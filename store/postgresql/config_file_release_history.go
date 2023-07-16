@@ -32,7 +32,7 @@ type configFileReleaseHistoryStore struct {
 // CreateConfigFileReleaseHistory 创建配置文件发布历史记录
 func (rh *configFileReleaseHistoryStore) CreateConfigFileReleaseHistory(tx store.Tx,
 	fileReleaseHistory *model.ConfigFileReleaseHistory) error {
-	s := "insert into config_file_release_history(name, namespace, group, file_name, content, comment, " +
+	s := "insert into config_file_release_history(name, namespace, \"group\", file_name, content, comment, " +
 		" md5, type, status, format, tags, " +
 		"create_time, create_by, modify_time, modify_by) values " +
 		"($1,$2,$3,$4,$5,$6,$7,$8, $9,$10,$11,$12,$13,$14,$15)"

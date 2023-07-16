@@ -68,7 +68,7 @@ func (cfr *configFileReleaseStore) CreateConfigFileRelease(tx store.Tx,
 func (cfr *configFileReleaseStore) UpdateConfigFileRelease(tx store.Tx,
 	fileRelease *model.ConfigFileRelease) (*model.ConfigFileRelease, error) {
 	s := "update config_file_release set name = $1 , content = $2, comment = $3, md5 = $4, version = $5, flag = 0, " +
-		" modify_time = $6, modify_by = $7 where namespace = $8 and group = $9 and file_name = $10"
+		" modify_time = $6, modify_by = $7 where namespace = $8 and \"group\" = $9 and file_name = $10"
 	var err error
 	if tx != nil {
 		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(s)
@@ -106,10 +106,10 @@ func (cfr *configFileReleaseStore) GetConfigFileReleaseWithAllFlag(tx store.Tx, 
 
 func (cfr *configFileReleaseStore) getConfigFileReleaseByFlag(tx store.Tx, namespace, group,
 	fileName string, withAllFlag bool) (*model.ConfigFileRelease, error) {
-	querySql := cfr.baseQuerySql() + "where namespace = $1 and group = $2 and file_name = $3 and flag = 0"
+	querySql := cfr.baseQuerySql() + "where namespace = $1 and \"group\" = $2 and file_name = $3 and flag = 0"
 
 	if withAllFlag {
-		querySql = cfr.baseQuerySql() + "where namespace = $1 and group = $2 and file_name = $3"
+		querySql = cfr.baseQuerySql() + "where namespace = $1 and \"group\" = $2 and file_name = $3"
 	}
 
 	var (
@@ -138,7 +138,7 @@ func (cfr *configFileReleaseStore) getConfigFileReleaseByFlag(tx store.Tx, names
 func (cfr *configFileReleaseStore) DeleteConfigFileRelease(tx store.Tx, namespace, group,
 	fileName, deleteBy string) error {
 	s := "update config_file_release set flag = 1, modify_time = $1, modify_by = $2, version = version + 1, " +
-		" md5='' where namespace = $3 and group = $4 and file_name = $5"
+		" md5='' where namespace = $3 and \"group\" = $4 and file_name = $5"
 	var err error
 	if tx != nil {
 		stmt, err := tx.GetDelegateTx().(*BaseTx).Prepare(s)
@@ -208,7 +208,7 @@ func (cfr *configFileReleaseStore) CountConfigFileReleaseEachGroup() (map[string
 }
 
 func (cfr *configFileReleaseStore) baseQuerySql() string {
-	return "select id, name, namespace, group, file_name, content, comment, md5, version, " +
+	return "select id, name, namespace, \"group\", file_name, content, comment, md5, version, " +
 		" create_time, create_by, modify_time, modify_by, " +
 		" flag from config_file_release "
 }
