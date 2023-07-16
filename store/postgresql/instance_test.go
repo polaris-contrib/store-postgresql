@@ -244,7 +244,7 @@ func TestGetExpandInstances(t *testing.T) {
 
 func TestGetMoreInstances(t *testing.T) {
 	obj := initConf()
-	resp, err := obj.instanceStore.GetMoreInstances(UnixSecondToTime(1685551812), false, true, []string{"111", "111a"})
+	resp, err := obj.instanceStore.GetMoreInstances(UnixSecondToTime(1685551812), true, true, []string{"111", "111a"})
 	fmt.Printf("resp: %+v, err: %+v", resp, err)
 }
 

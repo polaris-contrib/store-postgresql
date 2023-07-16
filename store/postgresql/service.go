@@ -771,8 +771,9 @@ func getMoreServiceWithMeta(queryHandler QueryHandler, mtime time.Time, firstUpd
 	// 非首次拉取
 	var args []interface{}
 	args = append(args, mtime)
-	str := genServiceSelectSQL() + `, service_metadata.id, mkey, mvalue ` +
-		`from service left join service_metadata on service.id = service_metadata.id where service.mtime >= $1`
+	str := genServiceSelectSQL() + ", service_metadata.id, mkey, mvalue " +
+		"from service left join service_metadata on service.id = service_metadata.id " +
+		"where service.mtime >= $1"
 	if disableBusiness {
 		str += " and service.namespace = $2"
 		args = append(args, SystemNamespace)
@@ -1064,10 +1065,10 @@ func fetchServiceMeta(rows *sql.Rows) (map[string]string, error) {
 
 // genServiceSelectSQL 生成service查询语句
 func genServiceSelectSQL() string {
-	return `select service.id, name, namespace, business, comment,
-			token, service.revision, owner, service.flag, service.ctime, 
-			service.mtime, ports, department, cmdb_mod1, cmdb_mod2, 
-			cmdb_mod3, reference, COALESCE(refer_filter, '') refer_filter, platform_id `
+	return "select service.id, name, namespace, business, comment, token, " +
+		"service.revision, owner, service.flag, service.ctime, service.mtime, " +
+		"ports, department, cmdb_mod1, cmdb_mod2, cmdb_mod3, reference, " +
+		"COALESCE(refer_filter, '') refer_filter, platform_id "
 }
 
 // callFetchServiceRows call fetch service rows
