@@ -89,7 +89,7 @@ func (rh *configFileReleaseHistoryStore) QueryConfigFileReleaseHistories(namespa
 
 	countSql += fmt.Sprintf("\"group\" like $%d and file_name like $%d", idx, idx+1)
 	querySql += fmt.Sprintf("\"group\" like $%d and file_name like $%d order by id desc limit $%d offset $%d",
-		idx+2, idx+3, idx+4, idx+5)
+		idx, idx+1, idx+2, idx+3)
 	queryParams = append(queryParams, "%"+group+"%")
 	queryParams = append(queryParams, "%"+fileName+"%")
 
