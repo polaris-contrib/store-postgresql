@@ -36,3 +36,10 @@ func TestQueryConfigFilesByGroup(t *testing.T) {
 	cnt, ret, err := obj.QueryConfigFilesByGroup("namespace", "group", 0, 10)
 	fmt.Printf("cnt: %+v, ret: %+v, err: %+v\n", cnt, ret, err)
 }
+
+func TestQueryConfigFileReleaseHistories(t *testing.T) {
+	obj := initConf()
+
+	cnt, ret, err := obj.QueryConfigFileReleaseHistories("", "", "", 0, 10, 0)
+	fmt.Printf("cnt: %+v, ret: %+v, err: %+v\n", cnt, ret, err)
+}
