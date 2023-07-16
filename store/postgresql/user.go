@@ -387,8 +387,10 @@ func (u *userStore) listUsers(filters map[string]string, offset uint32, limit ui
 		getSql += "  AND user_type != 0 "
 	}
 
-	args := make([]interface{}, 0)
-	var index = 1
+	var (
+		args = make([]interface{}, 0)
+		idx  = 1
+	)
 
 	if len(filters) != 0 {
 		for k, v := range filters {
@@ -396,26 +398,26 @@ func (u *userStore) listUsers(filters map[string]string, offset uint32, limit ui
 			countSql += " AND "
 			if k == NameAttribute {
 				if utils.IsPrefixWildName(v) {
-					getSql += " " + k + fmt.Sprintf(" like $%d ", index)
-					countSql += " " + k + fmt.Sprintf(" like $%d ", index)
+					getSql += " " + k + fmt.Sprintf(" like $%d ", idx)
+					countSql += " " + k + fmt.Sprintf(" like $%d ", idx)
 					args = append(args, "%"+v[:len(v)-1]+"%")
 				} else {
-					getSql += " " + k + fmt.Sprintf(" = $%d ", index)
-					countSql += " " + k + fmt.Sprintf(" = $%d ", index)
+					getSql += " " + k + fmt.Sprintf(" = $%d ", idx)
+					countSql += " " + k + fmt.Sprintf(" = $%d ", idx)
 					args = append(args, v)
 				}
 			} else if k == OwnerAttribute {
-				getSql += fmt.Sprintf(" (id = $%d OR owner = $%d) ", index, index+1)
-				countSql += fmt.Sprintf(" (id = $%d OR owner = $%d) ", index, index+1)
-				index += 1
+				getSql += fmt.Sprintf(" (id = $%d OR owner = $%d) ", idx, idx+1)
+				countSql += fmt.Sprintf(" (id = $%d OR owner = $%d) ", idx, idx+1)
+				idx += 2
 				args = append(args, v, v)
 				continue
 			} else {
-				getSql += " " + k + fmt.Sprintf(" = $%d ", index)
-				countSql += " " + k + fmt.Sprintf(" = $%d ", index)
+				getSql += " " + k + fmt.Sprintf(" = $%d ", idx)
+				countSql += " " + k + fmt.Sprintf(" = $%d ", idx)
 				args = append(args, v)
 			}
-			index++
+			idx++
 		}
 	}
 
@@ -424,7 +426,7 @@ func (u *userStore) listUsers(filters map[string]string, offset uint32, limit ui
 		return 0, nil, store.Error(err)
 	}
 
-	getSql += fmt.Sprintf(" ORDER BY mtime LIMIT $%d OFFSET $%d", index, index+1)
+	getSql += fmt.Sprintf(" ORDER BY mtime LIMIT $%d OFFSET $%d", idx, idx+1)
 	getArgs := append(args, limit, offset)
 
 	users, err := u.collectUsers(u.master.Query, getSql, getArgs)
@@ -456,7 +458,7 @@ func (u *userStore) listGroupUsers(filters map[string]string, offset uint32, lim
 		querySql += " AND u.user_type != 0 "
 	}
 
-	var index = 1
+	var idx = 1
 
 	for k, v := range filters {
 		if newK, ok := userLinkGroupAttributeMapping[k]; ok {
@@ -468,16 +470,16 @@ func (u *userStore) listGroupUsers(filters map[string]string, offset uint32, lim
 		}
 
 		if utils.IsPrefixWildName(v) {
-			querySql += " AND " + k + fmt.Sprintf(" like $%d", index)
-			countSql += " AND " + k + fmt.Sprintf(" like $%d", index)
+			querySql += " AND " + k + fmt.Sprintf(" like $%d", idx)
+			countSql += " AND " + k + fmt.Sprintf(" like $%d", idx)
 			args = append(args, v[:len(v)-1]+"%")
 		} else {
-			querySql += " AND " + k + fmt.Sprintf(" = $%d", index)
-			countSql += " AND " + k + fmt.Sprintf(" = $%d", index)
+			querySql += " AND " + k + fmt.Sprintf(" = $%d", idx)
+			countSql += " AND " + k + fmt.Sprintf(" = $%d", idx)
 			args = append(args, v)
 		}
 
-		index++
+		idx++
 	}
 
 	count, err := queryEntryCount(u.slave, countSql, args)
@@ -485,7 +487,7 @@ func (u *userStore) listGroupUsers(filters map[string]string, offset uint32, lim
 		return 0, nil, err
 	}
 
-	querySql += fmt.Sprintf(" ORDER BY u.mtime LIMIT $%d OFFSET $%d", index, index+1)
+	querySql += fmt.Sprintf(" ORDER BY u.mtime LIMIT $%d OFFSET $%d", idx, idx+1)
 	args = append(args, limit, offset)
 
 	users, err := u.collectUsers(u.master.Query, querySql, args)
