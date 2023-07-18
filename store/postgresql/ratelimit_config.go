@@ -51,7 +51,7 @@ func (rls *rateLimitStore) CreateRateLimit(limit *model.RateLimit) error {
 }
 
 func limitToEtimeStr(limit *model.RateLimit) string {
-	etimeStr := "sysdate()"
+	etimeStr := GetCurrentTimeFormat()
 	if limit.Disable {
 		etimeStr = emptyEnableTime
 	}
@@ -72,9 +72,9 @@ func (rls *rateLimitStore) createRateLimit(limit *model.RateLimit) error {
 
 	etimeStr := limitToEtimeStr(limit)
 	// 新建限流规则
-	str := fmt.Sprintf(`insert into ratelimit_config(
-			id, name, disable, service_id, method, labels, priority, rule, revision, ctime, mtime, etime)
-			values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, %s)`, etimeStr)
+	str := fmt.Sprintf("insert into ratelimit_config(id, name, disable, service_id, "+
+		"method, labels, priority, rule, revision, ctime, mtime, etime) "+
+		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, %s)", etimeStr)
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
