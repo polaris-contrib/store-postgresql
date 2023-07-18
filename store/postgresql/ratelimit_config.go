@@ -137,13 +137,18 @@ func (rls *rateLimitStore) enableRateLimit(limit *model.RateLimit) error {
 	}()
 
 	etimeStr := limitToEtimeStr(limit)
-	str := fmt.Sprintf(
-		`update ratelimit_config set disable = $1, revision = $2, mtime = $3, etime=%s where id = $4`, etimeStr)
+	disable := 0
+	if limit.Disable {
+		disable = 1
+	}
+
+	str := "update ratelimit_config set disable = $1, revision = $2, mtime = $3, " +
+		"etime = $4 where id = $5"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(limit.Disable, limit.Revision, GetCurrentTimeFormat(), limit.ID); err != nil {
+	if _, err = stmt.Exec(disable, limit.Revision, GetCurrentTimeFormat(), etimeStr, limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -152,6 +157,7 @@ func (rls *rateLimitStore) enableRateLimit(limit *model.RateLimit) error {
 		log.Errorf("[Store][database] update rate limit(%+v) commit tx err: %s", limit, err.Error())
 		return err
 	}
+
 	return nil
 }
 
@@ -168,14 +174,19 @@ func (rls *rateLimitStore) updateRateLimit(limit *model.RateLimit) error {
 	}()
 
 	etimeStr := limitToEtimeStr(limit)
-	str := fmt.Sprintf(`update ratelimit_config set name = $1, service_id = $2, disable = $3, method= $4,
-			labels = $5, priority = $6, rule = $7, revision = $8, mtime = $9, etime=%s where id = $10`, etimeStr)
+	disable := 0
+	if limit.Disable {
+		disable = 1
+	}
+	str := "update ratelimit_config set name = $1, service_id = $2, disable = $3, " +
+		"method = $4, labels = $5, priority = $6, rule = $7, revision = $8, " +
+		"mtime = $9, etime = $10 where id = $11"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(limit.Name, limit.ServiceID, limit.Disable, limit.Method, limit.Labels,
-		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), limit.ID); err != nil {
+	if _, err = stmt.Exec(limit.Name, limit.ServiceID, disable, limit.Method, limit.Labels,
+		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), etimeStr, limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -313,8 +324,9 @@ func fetchRateLimitCacheRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 			rateLimit model.RateLimit
 			serviceID string
 			flag      int
+			disable   int
 		)
-		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &rateLimit.Disable, &serviceID, &rateLimit.Method,
+		err := rows.Scan(&rateLimit.ID, &rateLimit.Name, &disable, &serviceID, &rateLimit.Method,
 			&rateLimit.Labels, &rateLimit.Priority, &rateLimit.Rule, &rateLimit.Revision, &flag,
 			&rateLimit.CreateTime, &rateLimit.ModifyTime, &rateLimit.EnableTime)
 		if err != nil {
@@ -324,6 +336,10 @@ func fetchRateLimitCacheRows(rows *sql.Rows) ([]*model.RateLimit, error) {
 		rateLimit.Valid = true
 		if flag == 1 {
 			rateLimit.Valid = false
+		}
+		rateLimit.Disable = false
+		if disable == 1 {
+			rateLimit.Disable = true
 		}
 		rateLimit.ServiceID = serviceID
 

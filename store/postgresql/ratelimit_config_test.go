@@ -40,3 +40,64 @@ func TestCreateRateLimit(t *testing.T) {
 	err := obj.rateLimitStore.CreateRateLimit(conf)
 	fmt.Printf("err: %+v\n", err)
 }
+
+func TestUpdateRateLimit(t *testing.T) {
+	obj := initConf()
+
+	// Method: Labels: Priority:0 Rule:{"service":{"value":"polaris.limiter"},"namespace":{"value":"Polaris"},"type":1,"amounts":[{"maxAmount":{"value":1},"validDuration":{"seconds":1}}],"action":{"value":"REJECT"},"disable":{},"regex_combine":{"value":true},"method":{"value":{}},"arguments":[{"key":"aa","value":{"value":{"value":"2"}}}],"name":{"value":"aa"},"max_queue_delay":{"value":1}} Revision:52df77fff7c14ec9a5a8306d381091fc Disable:false Valid:false CreateTime:0001-01-01 00:00:00 +0000 UTC ModifyTime:0001-01-01 00:00:00 +0000 UTC EnableTime:0001-01-01 00:00:00 +0000 UTC}),
+	conf := &model.RateLimit{
+		ID:        "d7af189c1986413ab928d501db200600",
+		Name:      "aa",
+		Disable:   true,
+		ServiceID: "",
+		Method:    "",
+		Labels:    "",
+		Priority:  1,
+		Revision:  "4444",
+	}
+	err := obj.rateLimitStore.UpdateRateLimit(conf)
+	fmt.Printf("err: %+v\n", err)
+}
+
+func TestEnableRateLimit(t *testing.T) {
+	obj := initConf()
+
+	// Method: Labels: Priority:0 Rule:{"service":{"value":"polaris.limiter"},"namespace":{"value":"Polaris"},"type":1,"amounts":[{"maxAmount":{"value":1},"validDuration":{"seconds":1}}],"action":{"value":"REJECT"},"disable":{},"regex_combine":{"value":true},"method":{"value":{}},"arguments":[{"key":"aa","value":{"value":{"value":"2"}}}],"name":{"value":"aa"},"max_queue_delay":{"value":1}} Revision:52df77fff7c14ec9a5a8306d381091fc Disable:false Valid:false CreateTime:0001-01-01 00:00:00 +0000 UTC ModifyTime:0001-01-01 00:00:00 +0000 UTC EnableTime:0001-01-01 00:00:00 +0000 UTC}),
+	conf := &model.RateLimit{
+		ID:        "d7af189c1986413ab928d501db200600",
+		Name:      "aa",
+		Disable:   true,
+		ServiceID: "",
+		Method:    "",
+		Labels:    "",
+		Priority:  1,
+		Revision:  "4444",
+	}
+	err := obj.rateLimitStore.EnableRateLimit(conf)
+	fmt.Printf("err: %+v\n", err)
+}
+
+func TestDeleteRateLimit(t *testing.T) {
+	obj := initConf()
+
+	// Method: Labels: Priority:0 Rule:{"service":{"value":"polaris.limiter"},"namespace":{"value":"Polaris"},"type":1,"amounts":[{"maxAmount":{"value":1},"validDuration":{"seconds":1}}],"action":{"value":"REJECT"},"disable":{},"regex_combine":{"value":true},"method":{"value":{}},"arguments":[{"key":"aa","value":{"value":{"value":"2"}}}],"name":{"value":"aa"},"max_queue_delay":{"value":1}} Revision:52df77fff7c14ec9a5a8306d381091fc Disable:false Valid:false CreateTime:0001-01-01 00:00:00 +0000 UTC ModifyTime:0001-01-01 00:00:00 +0000 UTC EnableTime:0001-01-01 00:00:00 +0000 UTC}),
+	conf := &model.RateLimit{
+		ID:        "d7af189c1986413ab928d501db200600",
+		Name:      "aa",
+		Disable:   true,
+		ServiceID: "",
+		Method:    "",
+		Labels:    "",
+		Priority:  1,
+		Revision:  "4444",
+	}
+	err := obj.rateLimitStore.DeleteRateLimit(conf)
+	fmt.Printf("err: %+v\n", err)
+}
+
+func TestGetRateLimitWithID(t *testing.T) {
+	obj := initConf()
+
+	ret, err := obj.rateLimitStore.GetRateLimitWithID("d7af189c1986413ab928d501db200600")
+	fmt.Printf("ret: %+v, err: %+v\n", ret, err)
+}
