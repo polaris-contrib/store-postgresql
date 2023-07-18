@@ -72,15 +72,16 @@ func (rls *rateLimitStore) createRateLimit(limit *model.RateLimit) error {
 
 	etimeStr := limitToEtimeStr(limit)
 	// 新建限流规则
-	str := fmt.Sprintf("insert into ratelimit_config(id, name, disable, service_id, "+
-		"method, labels, priority, rule, revision, ctime, mtime, etime) "+
-		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11, %s)", etimeStr)
+	str := "insert into ratelimit_config(id, name, disable, service_id, " +
+		"method, labels, priority, rule, revision, ctime, mtime, etime) " +
+		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(limit.ID, limit.Name, limit.Disable, limit.ServiceID, limit.Method, limit.Labels,
-		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+	if _, err = stmt.Exec(limit.ID, limit.Name, limit.Disable, limit.ServiceID, limit.Method,
+		limit.Labels, limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(),
+		GetCurrentTimeFormat(), etimeStr); err != nil {
 		log.Errorf("[Store][database] create rate limit(%+v), sql %s err: %s", limit, str, err.Error())
 		return err
 	}

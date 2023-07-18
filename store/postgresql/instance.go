@@ -979,17 +979,6 @@ func addMainInstance(tx *BaseTx, instance *model.Instance) error {
 		"cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime) " +
 		"values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, " +
 		"$15, $16, $17, $18, $19)"
-	// 此语句暂时留存，ON CONFLICT误法仅支持postgreSQL-11以上的版本
-	/*str := `
-			INSERT INTO instance(id, service_id, vpc_id, host, port, protocol, version, health_status, isolate,
-			 weight, enable_health_check, logic_set, cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
-			ON CONFLICT (id, service_id) DO
-			UPDATE
-	  		SET service_id = $20, vpc_id = $21, host = $22, port = $23, protocol = $24, version = $25,
-			    health_status = $26, isolate = $27, weight = $28, enable_health_check = $29,
-			    logic_set = $30, cmdb_region = $31, cmdb_zone = $32, cmdb_idc = $33, priority = $34,
-			    revision = $35, ctime = $36, mtime = $37`*/
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
