@@ -703,7 +703,7 @@ func (ss *serviceStore) getServiceMain(name string, namespace string) (*model.Se
 
 // getServiceByID 根据服务ID获取服务详情的内部函数
 func (ss *serviceStore) getServiceByID(serviceID string) (*model.Service, error) {
-	str := genServiceSelectSQL() + " from \"service\" where service.id = $1"
+	str := genServiceSelectSQL() + " from service where service.id = $1"
 	rows, err := ss.master.Query(str, serviceID)
 	if err != nil {
 		log.Errorf("[Store][database] get service by id query err: %s", err.Error())
@@ -794,8 +794,10 @@ func fetchServiceWithMetaRows(rows *sql.Rows) (map[string]*model.Service, error)
 	defer rows.Close()
 
 	out := make(map[string]*model.Service)
-	var id, mKey, mValue string
-	var flag int
+	var (
+		id, mKey, mValue string
+		flag             int
+	)
 	progress := 0
 	for rows.Next() {
 		progress++
@@ -805,14 +807,12 @@ func fetchServiceWithMetaRows(rows *sql.Rows) (map[string]*model.Service, error)
 
 		var item model.Service
 		if err := rows.Scan(&item.ID, &item.Name, &item.Namespace, &item.Business, &item.Comment,
-			&item.Token, &item.Revision, &item.Owner, &flag, &item.Ctime, &item.Mtime, &item.Ports,
+			&item.Token, &item.Revision, &item.Owner, &flag, &item.CreateTime, &item.ModifyTime, &item.Ports,
 			&item.Department, &item.CmdbMod1, &item.CmdbMod2, &item.CmdbMod3,
 			&item.Reference, &item.ReferFilter, &item.PlatformID, &id, &mKey, &mValue); err != nil {
 			log.Errorf("[Store][database] fetch service+meta rows scan err: %s", err.Error())
 			return nil, err
 		}
-		item.CreateTime = time.Unix(item.Ctime, 0)
-		item.ModifyTime = time.Unix(item.Mtime, 0)
 		item.Valid = true
 		if flag == 1 {
 			item.Valid = false
