@@ -703,7 +703,7 @@ func (ss *serviceStore) getServiceMain(name string, namespace string) (*model.Se
 
 // getServiceByID 根据服务ID获取服务详情的内部函数
 func (ss *serviceStore) getServiceByID(serviceID string) (*model.Service, error) {
-	str := genServiceSelectSQL() + " from service where service.id = $1"
+	str := genServiceSelectSQL() + " from \"service\" where service.id = $1"
 	rows, err := ss.master.Query(str, serviceID)
 	if err != nil {
 		log.Errorf("[Store][database] get service by id query err: %s", err.Error())
