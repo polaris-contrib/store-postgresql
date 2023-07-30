@@ -947,7 +947,7 @@ VALUES ('fbca9bfa04ae4ead86e1ecf5811e32a9',
         '301b1e9f0bbd47a6b697e26e99dfe012',
         'polaris',
         0,
-        'polaris reference',
+        '',
         '2021-09-06 07:55:07',
         '2021-09-06 07:55:09');
 COMMIT;

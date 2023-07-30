@@ -479,19 +479,15 @@ func (ss *serviceStore) getServiceAliasesInfo(filter map[string]string, offset u
 	defer func() { _ = rows.Close() }()
 
 	var out []*model.ServiceAlias
-	var ctime, mtime time.Time
 	for rows.Next() {
 		var entry model.ServiceAlias
 		err := rows.Scan(
-			&entry.ID, &entry.Alias, &entry.AliasNamespace, &ctime, &mtime, &entry.Comment,
+			&entry.ID, &entry.Alias, &entry.AliasNamespace, &entry.CreateTime, &entry.ModifyTime, &entry.Comment,
 			&entry.ServiceID, &entry.Service, &entry.Namespace, &entry.Owner)
 		if err != nil {
 			log.Errorf("[Store][database] get service alias rows scan err: %s", err.Error())
 			return nil, err
 		}
-
-		entry.CreateTime = ctime
-		entry.ModifyTime = mtime
 		out = append(out, &entry)
 	}
 
@@ -1078,7 +1074,6 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 	}
 	defer rows.Close()
 
-	var ctime, mtime time.Time
 	var flag int
 	progress := 0
 	for rows.Next() {
@@ -1090,7 +1085,7 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 		var item model.Service
 		err := rows.Scan(
 			&item.ID, &item.Name, &item.Namespace, &item.Business, &item.Comment,
-			&item.Token, &item.Revision, &item.Owner, &flag, &ctime, &mtime,
+			&item.Token, &item.Revision, &item.Owner, &flag, &item.CreateTime, &item.ModifyTime,
 			&item.Ports, &item.Department, &item.CmdbMod1, &item.CmdbMod2, &item.CmdbMod3,
 			&item.Reference, &item.ReferFilter, &item.PlatformID)
 
@@ -1099,8 +1094,6 @@ func callFetchServiceRows(rows *sql.Rows, callback func(entry *model.Service) (b
 			return err
 		}
 
-		item.CreateTime = ctime
-		item.ModifyTime = mtime
 		item.Valid = true
 		if flag == 1 {
 			item.Valid = false

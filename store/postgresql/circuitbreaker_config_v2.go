@@ -39,16 +39,16 @@ const (
 const (
 	insertCircuitBreakerRuleSql = "insert into circuitbreaker_rule_v2(id, name, namespace, enable, revision, " +
 		"description, level, src_service, src_namespace, dst_service, dst_namespace, dst_method, " +
-		"config, ctime, mtime, etime) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13, $14,$15, %s)"
+		"config, ctime, mtime, etime) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)"
 
 	updateCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set name = $1, namespace=$2, enable = $3, " +
 		"revision= $4, description = $5, level = $6, src_service = $7, src_namespace = $8, dst_service = $9, " +
-		"dst_namespace = $10, dst_method = $11, config = $12, mtime = $13, etime=%s where id = $14"
+		"dst_namespace = $10, dst_method = $11, config = $12, mtime = $13, etime = $14 where id = $15"
 
 	deleteCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set flag = 1, mtime = $1 where id = $2"
 
 	enableCircuitBreakerRuleSql = "update circuitbreaker_rule_v2 set enable = $1, revision = $2, mtime = $3, " +
-		"etime=%s where id = $4"
+		"etime = $4 where id = $5"
 
 	countCircuitBreakerRuleSql = "select count(*) from circuitbreaker_rule_v2 where flag = 0"
 
@@ -69,19 +69,21 @@ func (c *circuitBreakerStore) CreateCircuitBreakerRule(cbRule *model.CircuitBrea
 	err := RetryTransaction(labelCreateCircuitBreakerRule, func() error {
 		return c.createCircuitBreakerRule(cbRule)
 	})
-
 	return store.Error(err)
 }
 
 func (c *circuitBreakerStore) createCircuitBreakerRule(cbRule *model.CircuitBreakerRule) error {
 	return c.master.processWithTransaction(labelCreateCircuitBreakerRule, func(tx *BaseTx) error {
 		etimeStr := buildEtimeStr(cbRule.Enable)
-		str := fmt.Sprintf(insertCircuitBreakerRuleSql, etimeStr)
-		stmt, err := tx.Prepare(str)
-		if _, err = stmt.Exec(cbRule.ID, cbRule.Name, cbRule.Namespace, cbRule.Enable,
+		stmt, err := tx.Prepare(insertCircuitBreakerRuleSql)
+		enable := 0
+		if cbRule.Enable {
+			enable = 1
+		}
+		if _, err = stmt.Exec(cbRule.ID, cbRule.Name, cbRule.Namespace, enable,
 			cbRule.Revision, cbRule.Description, cbRule.Level, cbRule.SrcService,
 			cbRule.SrcNamespace, cbRule.DstService, cbRule.DstNamespace, cbRule.DstMethod,
-			cbRule.Rule, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+			cbRule.Rule, GetCurrentTimeFormat(), GetCurrentTimeFormat(), etimeStr); err != nil {
 			log.Errorf("[Store][database] fail to %s exec sql, err: %s", labelCreateCircuitBreakerRule, err.Error())
 			return err
 		}
@@ -106,15 +108,18 @@ func (c *circuitBreakerStore) UpdateCircuitBreakerRule(cbRule *model.CircuitBrea
 func (c *circuitBreakerStore) updateCircuitBreakerRule(cbRule *model.CircuitBreakerRule) error {
 	return c.master.processWithTransaction(labelUpdateCircuitBreakerRule, func(tx *BaseTx) error {
 		etimeStr := buildEtimeStr(cbRule.Enable)
-		str := fmt.Sprintf(updateCircuitBreakerRuleSql, etimeStr)
-		stmt, err := tx.Prepare(str)
+		stmt, err := tx.Prepare(updateCircuitBreakerRuleSql)
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(cbRule.Name, cbRule.Namespace, cbRule.Enable, cbRule.Revision,
+		enable := 0
+		if cbRule.Enable {
+			enable = 1
+		}
+		if _, err = stmt.Exec(cbRule.Name, cbRule.Namespace, enable, cbRule.Revision,
 			cbRule.Description, cbRule.Level, cbRule.SrcService, cbRule.SrcNamespace,
 			cbRule.DstService, cbRule.DstNamespace, cbRule.DstMethod, cbRule.Rule,
-			GetCurrentTimeFormat(), cbRule.ID); err != nil {
+			GetCurrentTimeFormat(), etimeStr, cbRule.ID); err != nil {
 			log.Errorf("[Store][database] fail to %s exec sql, err: %s", labelUpdateCircuitBreakerRule, err.Error())
 			return err
 		}
@@ -463,12 +468,15 @@ func (c *circuitBreakerStore) enableCircuitBreakerRule(cbRule *model.CircuitBrea
 	return c.master.processWithTransaction(labelEnableCircuitBreakerRule, func(tx *BaseTx) error {
 
 		etimeStr := buildEtimeStr(cbRule.Enable)
-		str := fmt.Sprintf(enableCircuitBreakerRuleSql, etimeStr)
-		stmt, err := tx.Prepare(str)
+		stmt, err := tx.Prepare(enableCircuitBreakerRuleSql)
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(cbRule.Enable, cbRule.Revision, GetCurrentTimeFormat(), cbRule.ID); err != nil {
+		enable := 0
+		if cbRule.Enable {
+			enable = 1
+		}
+		if _, err = stmt.Exec(enable, cbRule.Revision, GetCurrentTimeFormat(), etimeStr, cbRule.ID); err != nil {
 			log.Errorf(
 				"[Store][database] fail to %s exec sql, err: %s", labelEnableCircuitBreakerRule, err.Error())
 			return err

@@ -33,10 +33,10 @@ func initConf() *PostgresqlStore {
 			"master": map[interface{}]interface{}{
 				"dbType": "postgres",
 				"dbUser": "postgres",
-				"dbPwd":  "aaaaaa",
-				"dbAddr": "192.168.31.19",
+				"dbPwd":  "postgres",
+				"dbAddr": "127.0.0.1",
 				"dbPort": "5432",
-				"dbName": "polaris_server",
+				"dbName": "postgres",
 
 				"maxOpenConns":     10,
 				"maxIdleConns":     10,
