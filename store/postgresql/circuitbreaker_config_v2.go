@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 )
@@ -65,6 +64,22 @@ const (
 		"ctime, mtime, etime from circuitbreaker_rule_v2 where mtime > $1"
 )
 
+const (
+	labelCreateCircuitBreakerRuleOld    = "createCircuitBreakerRuleOld"
+	labelTagCircuitBreakerRuleOld       = "tagCircuitBreakerRuleOld"
+	labelDeleteTagCircuitBreakerRuleOld = "deleteTagCircuitBreakerRuleOld"
+	labelReleaseCircuitBreakerRuleOld   = "releaseCircuitBreakerRuleOld"
+	labelUnbindCircuitBreakerRuleOld    = "unbindCircuitBreakerRuleOld"
+	labelUpdateCircuitBreakerRuleOld    = "updateCircuitBreakerRuleOld"
+	labelDeleteCircuitBreakerRuleOld    = "deleteCircuitBreakerRuleOld"
+)
+
+// circuitBreakerStore 的实现
+type circuitBreakerStore struct {
+	master *BaseDB
+	slave  *BaseDB
+}
+
 func (c *circuitBreakerStore) CreateCircuitBreakerRule(cbRule *model.CircuitBreakerRule) error {
 	err := RetryTransaction(labelCreateCircuitBreakerRule, func() error {
 		return c.createCircuitBreakerRule(cbRule)
@@ -101,7 +116,6 @@ func (c *circuitBreakerStore) UpdateCircuitBreakerRule(cbRule *model.CircuitBrea
 	err := RetryTransaction(labelUpdateCircuitBreakerRule, func() error {
 		return c.updateCircuitBreakerRule(cbRule)
 	})
-
 	return store.Error(err)
 }
 
@@ -139,7 +153,6 @@ func (c *circuitBreakerStore) DeleteCircuitBreakerRule(id string) error {
 	err := RetryTransaction("deleteCircuitBreakerRule", func() error {
 		return c.deleteCircuitBreakerRule(id)
 	})
-
 	return store.Error(err)
 }
 
@@ -466,7 +479,6 @@ func (c *circuitBreakerStore) EnableCircuitBreakerRule(cbRule *model.CircuitBrea
 
 func (c *circuitBreakerStore) enableCircuitBreakerRule(cbRule *model.CircuitBreakerRule) error {
 	return c.master.processWithTransaction(labelEnableCircuitBreakerRule, func(tx *BaseTx) error {
-
 		etimeStr := buildEtimeStr(cbRule.Enable)
 		stmt, err := tx.Prepare(enableCircuitBreakerRuleSql)
 		if err != nil {

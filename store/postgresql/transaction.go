@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 )
 
@@ -100,12 +99,12 @@ func (t *transaction) DeleteNamespace(name string) error {
 		return err
 	}
 
-	str := "update namespace set flag = 1, mtime = $1 where name = $2"
+	str := "update namespace set flag = 1, mtime = CURRENT_TIMESTAMP where name = $1"
 	stmt, err := t.tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), name); err != nil {
+	if _, err = stmt.Exec(name); err != nil {
 		t.failed = true
 	}
 
@@ -180,12 +179,12 @@ func (t *transaction) DeleteService(name string, namespace string) error {
 		return err
 	}
 
-	str := "update service set flag = 1, mtime = $1 where name = $2 and namespace = $3"
+	str := "update service set flag = 1, mtime = CURRENT_TIMESTAMP where name = $1 and namespace = $2"
 	stmt, err := t.tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), name, namespace); err != nil {
+	if _, err = stmt.Exec(name, namespace); err != nil {
 		log.Errorf("[Store][database] delete service err: %s", err.Error())
 		t.failed = true
 		return err
@@ -200,12 +199,12 @@ func (t *transaction) DeleteAliasWithSourceID(sourceServiceID string) error {
 		return err
 	}
 
-	str := "update service set flag = 1, mtime = $1 where reference = $2"
+	str := "update service set flag = 1, mtime = CURRENT_TIMESTAMP where reference = $1"
 	stmt, err := t.tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err := stmt.Exec(GetCurrentTimeFormat(), sourceServiceID); err != nil {
+	if _, err := stmt.Exec(sourceServiceID); err != nil {
 		log.Errorf("[Store][database] delete service alias err: %s", err.Error())
 		t.failed = false
 		return err

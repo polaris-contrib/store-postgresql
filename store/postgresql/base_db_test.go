@@ -26,6 +26,10 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
+func TestNewDB(t *testing.T) {
+	initConf()
+}
+
 func TestRetry(t *testing.T) {
 	Convey("重试可以成功", t, func() {
 		var err error
@@ -61,5 +65,86 @@ func TestRetry(t *testing.T) {
 			So(err, ShouldNotBeNil)
 			So(time.Since(start), ShouldBeGreaterThan, time.Millisecond)
 		}
+	})
+}
+
+// TestRetryTransaction 测试retryTransaction
+func TestRetryTransaction(t *testing.T) {
+	Convey("handle错误可以正常捕获", t, func() {
+		err := RetryTransaction("test-handle", func() error {
+			t.Logf("handle ok")
+			return nil
+		})
+		So(err, ShouldBeNil)
+
+		start := time.Now()
+		err = RetryTransaction("test-handle", func() error {
+			return errors.New("Deadlock")
+		})
+		So(err, ShouldNotBeNil)
+		So(err.Error(), ShouldEqual, "Deadlock")
+		sub := time.Since(start)
+		t.Logf("%v", sub)
+		So(sub, ShouldBeGreaterThan, time.Millisecond*100)
+
+		start = time.Now()
+		err = RetryTransaction("test-handle", func() error {
+			return errors.New("other error")
+		})
+		So(err, ShouldNotBeNil)
+		sub = time.Since(start)
+		So(sub, ShouldBeLessThan, time.Millisecond*5)
+	})
+}
+
+// TestBatchOperation 测试BatchOperation
+func TestBatchOperation(t *testing.T) {
+	Convey("data为nil", t, func() {
+		err := BatchOperation("data为nil", nil, func(objects []interface{}) error {
+			return nil
+		})
+		So(err, ShouldBeNil)
+	})
+	Convey("data大小为1", t, func() {
+		data := make([]interface{}, 1)
+		num := 0
+		err := BatchOperation("data为1", data, func(objects []interface{}) error {
+			num++
+			return nil
+		})
+		So(err, ShouldBeNil)
+		So(num, ShouldEqual, 1)
+	})
+	Convey("data大小为101", t, func() {
+		data := make([]interface{}, 101)
+		num := 0
+		err := BatchOperation("data为101", data, func(objects []interface{}) error {
+			num++
+			return nil
+		})
+		So(err, ShouldBeNil)
+		So(num, ShouldEqual, 2)
+	})
+
+	Convey("data大小为100", t, func() {
+		data := make([]interface{}, 100)
+		num := 0
+		err := BatchOperation("data为100", data, func(objects []interface{}) error {
+			num++
+			return nil
+		})
+		So(err, ShouldBeNil)
+		So(num, ShouldEqual, 1)
+	})
+
+	Convey("data大小为0", t, func() {
+		data := make([]interface{}, 0)
+		num := 0
+		err := BatchOperation("data为100", data, func(objects []interface{}) error {
+			num++
+			return nil
+		})
+		So(err, ShouldBeNil)
+		So(num, ShouldEqual, 0)
 	})
 }

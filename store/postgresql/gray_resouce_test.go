@@ -17,32 +17,29 @@
 
 package postgresql
 
-import "github.com/polarismesh/polaris/store"
+import (
+	"fmt"
+	"github.com/polarismesh/polaris/common/model"
+	"testing"
+)
 
-type Tx struct {
-	delegateTx *BaseTx
-}
-
-func NewSqlDBTx(delegateTx *BaseTx) store.Tx {
-	return &Tx{
-		delegateTx: delegateTx,
+func TestCreateGrayResourceTx(t *testing.T) {
+	obj := initConf()
+	tx, err := obj.StartTx()
+	if err != nil {
+		return
 	}
-}
 
-func (t *Tx) Commit() error {
-	return t.delegateTx.Commit()
-}
+	grayResource := &model.GrayResource{
+		Name:       "Name1",
+		MatchRule:  "MatchRule1",
+		Valid:      false,
+		CreateBy:   "2024-10-01 11:11:11",
+		ModifyBy:   "2023-10-01 11:11:12",
+		CreateTime: UnixSecondToTime(5),
+		ModifyTime: UnixSecondToTime(6),
+	}
 
-func (t *Tx) Rollback() error {
-	return t.delegateTx.Rollback()
-}
-
-func (t *Tx) GetDelegateTx() interface{} {
-	return t.delegateTx
-}
-
-func (t *Tx) CreateReadView() error {
-	tx := t.delegateTx
-	_, err := tx.Exec("START TRANSACTION WITH CONSISTENT SNAPSHOT")
-	return err
+	err = obj.grayStore.CreateGrayResourceTx(tx, grayResource)
+	fmt.Printf("err: %+v\n", err)
 }

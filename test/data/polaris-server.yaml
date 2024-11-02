@@ -408,17 +408,17 @@ store:
       dbName: "polaris_server"
       dbUser: "postgres" ##DB_USER##
       dbPwd: "postgres" ##DB_PWD##
-      dbAddr: "127.0.0.1" ##DB_ADDR##
+      dbAddr: "10.1.2.174" ##DB_ADDR##
       dbPort: "5432"
       maxOpenConns: -1
       maxIdleConns: -1
       connMaxLifetime: 300 # 单位秒
 # 插件配置
 plugin:
-  # whitelist:
-  #   name: whitelist
-  #   option:
-  #     ip: [127.0.0.1]
+  whitelist:
+     name: whitelist
+     option:
+       ip: [130.0.0.1]
   cmdb:
     name: memory
     option:
@@ -480,3 +480,5 @@ plugin:
             rule: store-read
           - name: "GET:/v1/naming/services/count"
             rule: store-read
+  parsePassword:
+    name: aes

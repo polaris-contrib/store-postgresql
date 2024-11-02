@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
@@ -130,11 +129,11 @@ func (ss *serviceStore) deleteService(id, serviceName, namespaceName string) err
 // deleteServiceByID 删除服务或服务别名
 func deleteServiceByID(tx *BaseTx, id string) error {
 	log.Infof("[Store][database] delete service id(%s)", id)
-	stmt, err := tx.Prepare("update service set flag = 1, mtime = $1 where id = $2")
+	stmt, err := tx.Prepare("update service set flag = 1, mtime = current_timestamp where id = $1")
 	if err != nil {
 		return err
 	}
-	if _, err := stmt.Exec(GetCurrentTimeFormat(), id); err != nil {
+	if _, err := stmt.Exec(id); err != nil {
 		return err
 	}
 
@@ -144,11 +143,11 @@ func deleteServiceByID(tx *BaseTx, id string) error {
 // DeleteServiceAlias 删除服务别名
 func (ss *serviceStore) DeleteServiceAlias(name string, namespace string) error {
 	return ss.master.processWithTransaction("deleteServiceAlias", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("update service set flag = 1, mtime = $1 where name = $2 and namespace = $3")
+		stmt, err := tx.Prepare("update service set flag = 1, mtime = current_timestamp where name = $1 and namespace = $2")
 		if err != nil {
 			return store.Error(err)
 		}
-		if _, err = stmt.Exec(GetCurrentTimeFormat(), name, namespace); err != nil {
+		if _, err = stmt.Exec(name, namespace); err != nil {
 			log.Errorf("[Store][database] delete service alias err: %s", err.Error())
 			return store.Error(err)
 		}
@@ -191,14 +190,14 @@ func (ss *serviceStore) updateServiceAlias(alias *model.Service, needUpdateOwner
 	}()
 
 	updateStmt := "update service set name = $1, namespace = $2, reference = $3, comment = $4, " +
-		"token = $5, revision = $6, owner = $7, mtime = $8 where id = $9 and " +
-		"(select flag from (select flag from service where id = $10) as alias) = 0"
+		"token = $5, revision = $6, owner = $7, mtime = current_timestamp where id = $8 and " +
+		"(select flag from (select flag from service where id = $9) as alias) = 0"
 	stmt, err := tx.Prepare(updateStmt)
 	if err != nil {
 		return err
 	}
 	result, err := stmt.Exec(alias.Name, alias.Namespace, alias.Reference, alias.Comment, alias.Token,
-		alias.Revision, alias.Owner, GetCurrentTimeFormat(), alias.ID, alias.Reference)
+		alias.Revision, alias.Owner, alias.ID, alias.Reference)
 	if err != nil {
 		log.Errorf("[Store][ServiceAlias] update service alias exec err: %s", err.Error())
 		return err
@@ -305,11 +304,11 @@ func (ss *serviceStore) updateService(service *model.Service, needUpdateOwner bo
 // UpdateServiceToken 更新服务token
 func (ss *serviceStore) UpdateServiceToken(id string, token string, revision string) error {
 	return ss.master.processWithTransaction("updateServiceToken", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("update service set token = $1, revision = $2, mtime = $3 where id = $4")
+		stmt, err := tx.Prepare("update service set token = $1, revision = $2, mtime = current_timestamp where id = $3")
 		if err != nil {
 			return store.Error(err)
 		}
-		_, err = stmt.Exec(token, revision, GetCurrentTimeFormat(), id)
+		_, err = stmt.Exec(token, revision, id)
 		if err != nil {
 			log.Errorf("[Store][database] update service(%s) token err: %s", id, err.Error())
 			return store.Error(err)
@@ -954,7 +953,7 @@ func addServiceMain(tx *BaseTx, s *model.Service) error {
 	insertStmt := "insert into service(id, name, namespace, ports, business, department, " +
 		"cmdb_mod1, cmdb_mod2, cmdb_mod3, comment, token, reference,  platform_id, " +
 		"revision, owner, ctime, mtime) values($1, $2, $3, $4, $5, $6, $7, $8, $9, " +
-		"$10, $11, $12, $13, $14, $15, $16, $17)"
+		"$10, $11, $12, $13, $14, $15, current_timestamp, current_timestamp)"
 	stmt, err := tx.Prepare(insertStmt)
 	if err != nil {
 		return err
@@ -962,7 +961,7 @@ func addServiceMain(tx *BaseTx, s *model.Service) error {
 
 	_, err = stmt.Exec(s.ID, s.Name, s.Namespace, s.Ports, s.Business, s.Department,
 		s.CmdbMod1, s.CmdbMod2, s.CmdbMod3, s.Comment, s.Token,
-		s.Reference, s.PlatformID, s.Revision, s.Owner, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+		s.Reference, s.PlatformID, s.Revision, s.Owner)
 
 	return err
 }
@@ -979,11 +978,9 @@ func addServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 	for key, value := range meta {
 		cnt++
 		if cnt == len(meta) {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", index, index+1, index+2,
-				GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, current_timestamp, current_timestamp)", index, index+1, index+2)
 		} else {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'),", index, index+1, index+2,
-				GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, current_timestamp, current_timestamp),", index, index+1, index+2)
 		}
 		index += 3
 
@@ -1001,8 +998,8 @@ func addServiceMeta(tx *BaseTx, id string, meta map[string]string) error {
 func updateServiceMain(tx *BaseTx, service *model.Service) error {
 	str := "update service set name = $1, namespace = $2, ports = $3, business = $4, " +
 		"department = $5, cmdb_mod1 = $6, cmdb_mod2 = $7, cmdb_mod3 = $8, comment = $9, " +
-		"token = $10, platform_id = $11, revision = $12, owner = $13, mtime = $14 " +
-		"where id = $15"
+		"token = $10, platform_id = $11, revision = $12, owner = $13, mtime = current_timestamp " +
+		"where id = $14"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1011,7 +1008,7 @@ func updateServiceMain(tx *BaseTx, service *model.Service) error {
 	_, err = stmt.Exec(service.Name, service.Namespace, service.Ports, service.Business,
 		service.Department, service.CmdbMod1, service.CmdbMod2, service.CmdbMod3,
 		service.Comment, service.Token, service.PlatformID, service.Revision,
-		service.Owner, GetCurrentTimeFormat(), service.ID)
+		service.Owner, service.ID)
 	return err
 }
 

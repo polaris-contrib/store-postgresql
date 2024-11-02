@@ -33,21 +33,8 @@ func initConf() *PostgresqlStore {
 			"master": map[interface{}]interface{}{
 				"dbType": "postgres",
 				"dbUser": "postgres",
-				"dbPwd":  "postgres",
-				"dbAddr": "127.0.0.1",
-				"dbPort": "5432",
-				"dbName": "postgres",
-
-				"maxOpenConns":     10,
-				"maxIdleConns":     10,
-				"connMaxLifetime":  10,
-				"txIsolationLevel": 2,
-			},
-			/*"slave": map[interface{}]interface{}{
-				"dbType": "postgres",
-				"dbUser": "postgres",
 				"dbPwd":  "aaaaaa",
-				"dbAddr": "192.168.31.19",
+				"dbAddr": "127.0.0.1",
 				"dbPort": "5432",
 				"dbName": "polaris_server",
 
@@ -55,7 +42,7 @@ func initConf() *PostgresqlStore {
 				"maxIdleConns":     10,
 				"connMaxLifetime":  10,
 				"txIsolationLevel": 2,
-			},*/
+			},
 		},
 	}
 	obj := &PostgresqlStore{}

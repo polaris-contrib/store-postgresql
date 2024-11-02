@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 	"go.uber.org/zap"
@@ -93,7 +92,8 @@ func (r *routingConfigStoreV2) createRoutingConfigV2Tx(tx *BaseTx, conf *model.R
 	}
 
 	insertSQL := "INSERT INTO routing_config_v2(id, namespace, name, policy, config, enable, " +
-		" priority, revision, description, ctime, mtime, etime) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'%s')"
+		" priority, revision, description, ctime, mtime, etime) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9," +
+		"current_timestamp,current_timestamp,'%s')"
 
 	var enable int
 	if conf.Enable {
@@ -112,8 +112,7 @@ func (r *routingConfigStoreV2) createRoutingConfigV2Tx(tx *BaseTx, conf *model.R
 	}
 
 	if _, err = stmt.Exec(conf.ID, conf.Namespace, conf.Name, conf.Policy,
-		conf.Config, enable, conf.Priority, conf.Revision, conf.Description,
-		GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+		conf.Config, enable, conf.Priority, conf.Revision, conf.Description); err != nil {
 		log.Errorf("[Store][database] create routing v2(%+v) err: %s", conf, err.Error())
 		return store.Error(err)
 	}
@@ -164,20 +163,20 @@ func (r *routingConfigStoreV2) updateRoutingConfigV2Tx(tx *BaseTx, conf *model.R
 	}
 
 	str := "update routing_config_v2 set name = $1, policy = $2, config = $3, revision = $4, priority = $5, " +
-		" description = $6, mtime = $7 where id = $8"
+		" description = $6, mtime = current_timestamp where id = $7"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return store.Error(err)
 	}
 	if _, err = stmt.Exec(conf.Name, conf.Policy, conf.Config, conf.Revision, conf.Priority,
-		conf.Description, GetCurrentTimeFormat(), conf.ID); err != nil {
+		conf.Description, conf.ID); err != nil {
 		log.Errorf("[Store][database] update routing config v2(%+v) exec err: %s", conf, err.Error())
 		return store.Error(err)
 	}
 	return nil
 }
 
-// EnableRateLimit Enable current limit rules
+// EnableRouting Enable current limit rules
 func (r *routingConfigStoreV2) EnableRouting(conf *model.RouterConfig) error {
 	if conf.ID == "" || conf.Revision == "" {
 		return errors.New("[Store][database] enable routing config v2 missing some params")
@@ -196,13 +195,13 @@ func (r *routingConfigStoreV2) EnableRouting(conf *model.RouterConfig) error {
 			etimeStr = emptyEnableTime
 		}
 
-		str := "update routing_config_v2 set enable = $1, revision = $2, mtime = $3, " +
-			"etime=$4 where id = $5"
+		str := "update routing_config_v2 set enable = $1, revision = $2, mtime = current_timestamp, " +
+			"etime=$3 where id = $4"
 		stmt, err := r.master.Prepare(str)
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(enable, conf.Revision, GetCurrentTimeFormat(), etimeStr, conf.ID); err != nil {
+		if _, err = stmt.Exec(enable, conf.Revision, etimeStr, conf.ID); err != nil {
 			log.Errorf("[Store][database] update outing config v2(%+v), sql %s, err: %s", conf, str, err)
 			return err
 		}
@@ -221,12 +220,12 @@ func (r *routingConfigStoreV2) DeleteRoutingConfigV2(ruleID string) error {
 		return store.NewStatusError(store.EmptyParamsErr, "missing service id")
 	}
 
-	str := "update routing_config_v2 set flag = 1, mtime = $1 where id = $2"
+	str := "update routing_config_v2 set flag = 1, mtime = current_timestamp where id = $1"
 	stmt, err := r.master.Prepare(str)
 	if err != nil {
 		return store.Error(err)
 	}
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), ruleID); err != nil {
+	if _, err = stmt.Exec(ruleID); err != nil {
 		log.Errorf("[Store][database] delete routing config v2(%s) err: %s", ruleID, err.Error())
 		return store.Error(err)
 	}

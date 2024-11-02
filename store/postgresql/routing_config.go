@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 )
@@ -54,13 +53,12 @@ func (rs *routingConfigStore) CreateRoutingConfig(conf *model.RoutingConfig) err
 
 			// 服务配置的创建由外层进行服务的保护，这里不需要加锁
 			str := "insert into routing_config(id, in_bounds, out_bounds, revision, " +
-				"ctime, mtime) values($1,$2,$3,$4,$5,$6)"
+				"current_timestamp, current_timestamp) values($1,$2,$3,$4)"
 			stmt, err := tx.Prepare(str)
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err = stmt.Exec(conf.ID, conf.InBounds, conf.OutBounds,
-				conf.Revision, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+			if _, err = stmt.Exec(conf.ID, conf.InBounds, conf.OutBounds, conf.Revision); err != nil {
 				log.Errorf("[Store][database] create routing(%+v) err: %s", conf, err.Error())
 				return store.Error(err)
 			}
@@ -88,12 +86,12 @@ func (rs *routingConfigStore) UpdateRoutingConfig(conf *model.RoutingConfig) err
 	return RetryTransaction("updateRoutingConfig", func() error {
 		return rs.master.processWithTransaction("updateRoutingConfig", func(tx *BaseTx) error {
 			str := "update routing_config set in_bounds = $1, out_bounds = $2, " +
-				"revision = $3, mtime = $4 where id = $5"
+				"revision = $3, mtime = current_timestamp where id = $5"
 			stmt, err := tx.Prepare(str)
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err = stmt.Exec(conf.InBounds, conf.OutBounds, conf.Revision, GetCurrentTimeFormat(), conf.ID); err != nil {
+			if _, err = stmt.Exec(conf.InBounds, conf.OutBounds, conf.Revision, conf.ID); err != nil {
 				log.Errorf("[Store][database] update routing config(%+v) exec err: %s", conf, err.Error())
 				return store.Error(err)
 			}
@@ -116,11 +114,11 @@ func (rs *routingConfigStore) DeleteRoutingConfig(serviceID string) error {
 	}
 	return RetryTransaction("deleteRoutingConfig", func() error {
 		return rs.master.processWithTransaction("deleteRoutingConfig", func(tx *BaseTx) error {
-			stmt, err := tx.Prepare(`update routing_config set flag = 1, mtime = $1 where id = $2`)
+			stmt, err := tx.Prepare(`update routing_config set flag = 1, mtime = current_timestamp where id = $1`)
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err = stmt.Exec(GetCurrentTimeFormat(), serviceID); err != nil {
+			if _, err = stmt.Exec(serviceID); err != nil {
 				log.Errorf("[Store][database] delete routing config(%s) err: %s", serviceID, err.Error())
 				return store.Error(err)
 			}
@@ -148,11 +146,11 @@ func (rs *routingConfigStore) DeleteRoutingConfigTx(tx store.Tx, serviceID strin
 
 	dbTx := tx.GetDelegateTx().(*BaseTx)
 
-	stmt, err := dbTx.Prepare(`update routing_config set flag = 1, mtime = $1 where id = $2`)
+	stmt, err := dbTx.Prepare(`update routing_config set flag = 1, mtime = current_timestamp where id = $1`)
 	if err != nil {
 		return store.Error(err)
 	}
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), serviceID); err != nil {
+	if _, err = stmt.Exec(serviceID); err != nil {
 		log.Errorf("[Store][database] delete routing config(%s) err: %s", serviceID, err.Error())
 		return store.Error(err)
 	}

@@ -20,24 +20,11 @@ package postgresql
 import (
 	"bytes"
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
-
-	"github.com/polarismesh/polaris/common/log"
-	"github.com/polarismesh/polaris/store"
 )
-
-func toUnderscoreName(name string) string {
-	var buf bytes.Buffer
-	for i, token := range name {
-		if unicode.IsUpper(token) && i > 0 {
-			buf.WriteString("_")
-		}
-		buf.WriteString(strings.ToLower(string(token)))
-	}
-	return buf.String()
-}
 
 // QueryHandler is the interface that wraps the basic Query method.
 type QueryHandler func(query string, args ...interface{}) (*sql.Rows, error)
@@ -77,6 +64,30 @@ func BatchQuery(label string, data []interface{}, handler BatchHandler) error {
 		}
 	}
 
+	return nil
+}
+
+// BatchOperation 批量操作
+// @note 每次最多操作100个
+func BatchOperation(label string, data []interface{}, handler BatchHandler) error {
+	if data == nil {
+		return nil
+	}
+	maxCount := 100
+	progress := 0
+	for begin := 0; begin < len(data); begin += maxCount {
+		end := begin + maxCount
+		if end > len(data) {
+			end = len(data)
+		}
+		if err := handler(data[begin:end]); err != nil {
+			return err
+		}
+		progress += end - begin
+		if progress%maxCount == 0 {
+			log.Infof("[Store][database][Batch] operation (%s) progress(%d/%d)", label, progress, len(data))
+		}
+	}
 	return nil
 }
 
@@ -123,46 +134,25 @@ func serviceAliasFilter2Where(filter map[string]string) map[string]string {
 	return out
 }
 
-// BatchOperation 批量操作
-// @note 每次最多操作100个
-func BatchOperation(label string, data []interface{}, handler BatchHandler) error {
-	if data == nil {
-		return nil
+// timeToTimestamp 转时间戳（秒）
+// 由于 FROM_UNIXTIME 不支持负数，所以小于0的情况赋值为 1
+func timeToTimestamp(t time.Time) int64 {
+	ts := t.Unix()
+	if ts < 0 {
+		ts = 1
 	}
-	maxCount := 100
-	progress := 0
-	for begin := 0; begin < len(data); begin += maxCount {
-		end := begin + maxCount
-		if end > len(data) {
-			end = len(data)
-		}
-		if err := handler(data[begin:end]); err != nil {
-			return err
-		}
-		progress += end - begin
-		if progress%maxCount == 0 {
-			log.Infof("[Store][database][Batch] operation (%s) progress(%d/%d)", label, progress, len(data))
-		}
-	}
-	return nil
+	return ts
 }
 
-// checkDataBaseAffectedRows 检查数据库处理返回的行数
-func checkDataBaseAffectedRows(result sql.Result, counts ...int64) error {
-	n, err := result.RowsAffected()
-	if err != nil {
-		log.Errorf("[Store][Database] get rows affected err: %s", err.Error())
-		return err
-	}
-
-	for _, c := range counts {
-		if n == c {
-			return nil
+func toUnderscoreName(name string) string {
+	var buf bytes.Buffer
+	for i, token := range name {
+		if unicode.IsUpper(token) && i > 0 {
+			buf.WriteString("_")
 		}
+		buf.WriteString(strings.ToLower(string(token)))
 	}
-
-	log.Errorf("[Store][Database] get rows affected result(%d) is not match expect(%+v)", n, counts)
-	return store.NewStatusError(store.AffectedRowsNotMatch, "affected rows not matched")
+	return buf.String()
 }
 
 func GetLocation() *time.Location {
@@ -203,19 +193,25 @@ func UnixSecondToTime(second int64) time.Time {
 	return time.Unix(second, 0).In(loc)
 }
 
-// UnixMilliToTime 毫秒级时间戳转time
-func UnixMilliToTime(milli int64) time.Time {
-	loc := GetLocation()
-	return time.Unix(milli/1000, (milli%1000)*(1000*1000)).In(loc)
-}
-
-// UnixNanoToTime 纳秒级时间戳转time
-func UnixNanoToTime(nano int64) time.Time {
-	loc := GetLocation()
-	return time.Unix(nano/(1000*1000*1000), nano%(1000*1000*1000)).In(loc)
-}
-
 // ConvertSecond 转换指定时间的毫秒
 func ConvertSecond(ctime time.Time) int64 {
 	return ctime.In(GetLocation()).Unix()
+}
+
+// TimestampToInt64 时间字符串转换成int64
+func TimestampToInt64(timeStr string) int64 {
+	// 定义时间格式，注意 . 后的微秒部分
+	layout := "2006-01-02 15:04:05.999999"
+
+	// 解析字符串为 time.Time 类型
+	t, err := time.Parse(layout, timeStr)
+	if err != nil {
+		fmt.Println("Error parsing time:", err)
+		return 0
+	}
+
+	// 转换为 Unix 时间戳 (秒)
+	unixTime := t.Unix()
+
+	return unixTime
 }

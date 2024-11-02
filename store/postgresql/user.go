@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
@@ -81,27 +80,15 @@ func (u *userStore) addUser(user *model.User) error {
 
 	defer func() { _ = tx.Rollback() }()
 
-	addSql := "INSERT INTO user(id, name, password, owner, source, token, " +
-		" comment, flag, user_type, " +
-		" ctime, mtime, mobile, email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)"
+	addSql := "INSERT INTO user(id, name, password, owner, source, token, comment, flag, user_type, " +
+		" ctime, mtime, mobile, email) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP,$10,$11)"
 	stmt, err := tx.Prepare(addSql)
 	if err != nil {
 		return store.Error(err)
 	}
 	_, err = stmt.Exec([]interface{}{
-		user.ID,
-		user.Name,
-		user.Password,
-		user.Owner,
-		user.Source,
-		user.Token,
-		user.Comment,
-		0,
-		user.Type,
-		GetCurrentTimeFormat(),
-		GetCurrentTimeFormat(),
-		user.Mobile,
-		user.Email,
+		user.ID, user.Name, user.Password, user.Owner, user.Source,
+		user.Token, user.Comment, 0, user.Type, user.Mobile, user.Email,
 	}...)
 
 	if err != nil {
@@ -226,9 +213,9 @@ func (u *userStore) deleteUser(user *model.User) error {
 		return err
 	}
 
-	stmt, err = tx.Prepare("UPDATE user_group SET mtime = $1 WHERE id IN (SELECT DISTINCT group_id FROM " +
-		" user_group_relation WHERE user_id = $2)")
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), user.ID); err != nil {
+	stmt, err = tx.Prepare("UPDATE user_group SET mtime = CURRENT_TIMESTAMP WHERE id IN (SELECT DISTINCT group_id FROM " +
+		" user_group_relation WHERE user_id = $1)")
+	if _, err = stmt.Exec(user.ID); err != nil {
 		log.Error("[Store][User] update usergroup mtime", zap.Error(err))
 		return err
 	}

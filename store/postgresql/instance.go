@@ -21,10 +21,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"
@@ -214,11 +214,11 @@ func (ins *instanceStore) DeleteInstance(instanceID string) error {
 	}
 	return RetryTransaction("deleteInstance", func() error {
 		return ins.master.processWithTransaction("deleteInstance", func(tx *BaseTx) error {
-			stmt, err := tx.Prepare("update instance set flag = 1, mtime = $1 where id = $2")
+			stmt, err := tx.Prepare("update instance set flag = 1, mtime = CURRENT_TIMESTAMP where id = $1")
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err = stmt.Exec(GetCurrentTimeFormat(), instanceID); err != nil {
+			if _, err = stmt.Exec(instanceID); err != nil {
 				return store.Error(err)
 			}
 
@@ -240,7 +240,7 @@ func (ins *instanceStore) BatchDeleteInstances(ids []interface{}) error {
 				if len(objects) == 0 {
 					return nil
 				}
-				str := fmt.Sprintf("update instance set flag = 1, mtime = '%s'", GetCurrentTimeFormat())
+				str := "update instance set flag = 1, mtime = CURRENT_TIMESTAMP"
 				placeholder, _ := PlaceholdersNI(len(objects), 1)
 				str += " where id in ( " + placeholder + ")"
 				stmt, err := tx.Prepare(str)
@@ -474,16 +474,18 @@ func (ins *instanceStore) getExpandInstancesCount(filter, metaFilter map[string]
 // GetMoreInstances 根据mtime获取增量修改数据
 // 这里会返回所有的数据的，包括valid=false的数据
 // 对于首次拉取，firstUpdate=true，只会拉取flag!=1的数据
-func (ins *instanceStore) GetMoreInstances(mtime time.Time, firstUpdate, needMeta bool, serviceID []string) (
-	map[string]*model.Instance, error) {
+func (ins *instanceStore) GetMoreInstances(tx store.Tx, mtime time.Time, firstUpdate, needMeta bool,
+	serviceID []string) (map[string]*model.Instance, error) {
+
+	dbTx, _ := tx.GetDelegateTx().(*BaseTx)
 	if needMeta {
-		instances, err := ins.getMoreInstancesMainWithMeta(mtime, firstUpdate, serviceID)
+		instances, err := ins.getMoreInstancesMainWithMeta(dbTx, mtime, firstUpdate, serviceID)
 		if err != nil {
 			return nil, err
 		}
 		return instances, nil
 	}
-	instances, err := ins.getMoreInstancesMain(mtime, firstUpdate, serviceID)
+	instances, err := ins.getMoreInstancesMain(dbTx, mtime, firstUpdate, serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -522,11 +524,11 @@ func (ins *instanceStore) GetInstanceMeta(instanceID string) (map[string]string,
 func (ins *instanceStore) SetInstanceHealthStatus(instanceID string, flag int, revision string) error {
 	return RetryTransaction("setInstanceHealthStatus", func() error {
 		return ins.master.processWithTransaction("setInstanceHealthStatus", func(tx *BaseTx) error {
-			stmt, err := tx.Prepare("update instance set health_status = $1, revision = $2, mtime = $3 where id = $4")
+			stmt, err := tx.Prepare("update instance set health_status = $1, revision = $2, mtime = CURRENT_TIMESTAMP where id = $3")
 			if err != nil {
 				return store.Error(err)
 			}
-			if _, err := stmt.Exec(flag, revision, GetCurrentTimeFormat(), instanceID); err != nil {
+			if _, err := stmt.Exec(flag, revision, instanceID); err != nil {
 				return store.Error(err)
 			}
 
@@ -549,8 +551,8 @@ func (ins *instanceStore) BatchSetInstanceHealthStatus(ids []interface{}, isolat
 					return nil
 				}
 				var index = 1
-				str := fmt.Sprintf("update instance set health_status = $%d, revision = $%d, mtime = '%v' where id in ",
-					index, index+1, GetCurrentTimeFormat())
+				str := fmt.Sprintf("update instance set health_status = $%d, revision = $%d, mtime = CURRENT_TIMESTAMP where id in ",
+					index, index+1)
 				index += 2
 
 				placeholder, _ := PlaceholdersNI(len(objects), index)
@@ -589,8 +591,8 @@ func (ins *instanceStore) BatchSetInstanceIsolate(ids []interface{}, isolate int
 					return nil
 				}
 				var index = 1
-				str := fmt.Sprintf("update instance set isolate = $%d, revision = $%d, mtime = '%v' where id in ",
-					index, index+1, GetCurrentTimeFormat())
+				str := fmt.Sprintf("update instance set isolate = $%d, revision = $%d, mtime = CURRENT_TIMESTAMP where id in ",
+					index, index+1)
 
 				placeholder, _ := PlaceholdersNI(len(objects), index+2)
 				str += "(" + placeholder + ")"
@@ -634,8 +636,8 @@ func (ins *instanceStore) BatchAppendInstanceMetadata(requests []*store.Instance
 			args := make([]interface{}, 0, len(metadata)*3)
 			var index = 1
 			for k, v := range metadata {
-				values = append(values, fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')",
-					index, index+1, index+2, GetCurrentTimeFormat(), GetCurrentTimeFormat()))
+				values = append(values, fmt.Sprintf("($%d, $%d, $%d, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
+					index, index+1, index+2))
 				index += 3
 				args = append(args, id, k, v)
 			}
@@ -652,11 +654,11 @@ func (ins *instanceStore) BatchAppendInstanceMetadata(requests []*store.Instance
 				return err
 			}
 
-			stmt, err = tx.Prepare("update instance set revision = $1, mtime = $2 where id = $3")
+			stmt, err = tx.Prepare("update instance set revision = $1, mtime = CURRENT_TIMESTAMP where id = $2")
 			if err != nil {
 				return err
 			}
-			if _, err := stmt.Exec(revision, GetCurrentTimeFormat(), id); err != nil {
+			if _, err := stmt.Exec(revision, id); err != nil {
 				log.Errorf("[Store][database] append instance metadata update revision err: %s", err.Error())
 				return err
 			}
@@ -697,11 +699,11 @@ func (ins *instanceStore) BatchRemoveInstanceMetadata(requests []*store.Instance
 				return err
 			}
 
-			stmt, err = tx.Prepare("update instance set revision = $1, mtime = $2 where id = $3")
+			stmt, err = tx.Prepare("update instance set revision = $1, mtime = CURRENT_TIMESTAMP where id = $2")
 			if err != nil {
 				return err
 			}
-			if _, err := stmt.Exec(revision, GetCurrentTimeFormat(), id); err != nil {
+			if _, err := stmt.Exec(revision, id); err != nil {
 				log.Errorf("[Store][database] remove instance metadata by keys update revision err: %s", err.Error())
 				return err
 			}
@@ -723,13 +725,11 @@ func (ins *instanceStore) getInstance(instanceID string) (*model.Instance, error
 	if err != nil {
 		return nil, err
 	}
-
 	if len(out) == 0 {
 		return nil, err
 	}
 
 	meta, err := ins.GetInstanceMeta(out[0].ID())
-	log.Infof("rows: %+v, err: %+v, meta: %+v", rows, err, meta)
 	if err != nil {
 		return nil, err
 	}
@@ -741,12 +741,12 @@ func (ins *instanceStore) getInstance(instanceID string) (*model.Instance, error
 
 // getMoreInstancesMainWithMeta 获取增量instance+healthcheck+meta内容
 // @note ro库有多个实例，且主库到ro库各实例的同步时间不一致。为避免获取不到meta，需要采用一条sql语句获取全部数据
-func (ins *instanceStore) getMoreInstancesMainWithMeta(mtime time.Time, firstUpdate bool, serviceID []string) (
+func (ins *instanceStore) getMoreInstancesMainWithMeta(tx *BaseTx, mtime time.Time, firstUpdate bool, serviceID []string) (
 	map[string]*model.Instance, error) {
 	// 首次拉取
 	if firstUpdate {
 		// 获取全量服务实例
-		instances, err := ins.getMoreInstancesMain(mtime, firstUpdate, serviceID)
+		instances, err := ins.getMoreInstancesMain(tx, mtime, firstUpdate, serviceID)
 		if err != nil {
 			log.Errorf("[Store][database] get more instance main err: %s", err.Error())
 			return nil, err
@@ -795,9 +795,12 @@ func fetchInstanceWithMetaRows(rows *sql.Rows) (map[string]*model.Instance, erro
 	defer rows.Close()
 
 	out := make(map[string]*model.Instance)
-	var item model.InstanceStore
-	var id, mKey, mValue string
-	var ctime, mtime time.Time
+	var (
+		item             model.InstanceStore
+		id, mKey, mValue string
+		//ctime, mtime time.Time
+		ctimeStr, mtimeStr string
+	)
 	progress := 0
 	for rows.Next() {
 		progress++
@@ -807,13 +810,22 @@ func fetchInstanceWithMetaRows(rows *sql.Rows) (map[string]*model.Instance, erro
 		if err := rows.Scan(&item.ID, &item.ServiceID, &item.VpcID, &item.Host, &item.Port, &item.Protocol,
 			&item.Version, &item.HealthStatus, &item.Isolate, &item.Weight, &item.EnableHealthCheck,
 			&item.LogicSet, &item.Region, &item.Zone, &item.Campus, &item.Priority, &item.Revision,
-			&item.Flag, &item.CheckType, &item.TTL, &id, &mKey, &mValue, &ctime, &mtime); err != nil {
+			&item.Flag, &item.CheckType, &item.TTL, &id, &mKey, &mValue, &ctimeStr, &mtimeStr); err != nil {
 			log.Errorf("[Store][database] fetch instance+meta rows err: %s", err.Error())
 			return nil, err
 		}
 
-		item.CreateTime = ConvertSecond(ctime)
-		item.ModifyTime = ConvertSecond(mtime)
+		// 将字符串转换为int64
+		ctimeFloat, err := strconv.ParseFloat(ctimeStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse create_time: %v", err)
+		}
+		mtimeFloat, err := strconv.ParseFloat(mtimeStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse modify_time: %v", err)
+		}
+		item.CreateTime = int64(ctimeFloat)
+		item.ModifyTime = int64(mtimeFloat)
 
 		if _, ok := out[item.ID]; !ok {
 			out[item.ID] = model.Store2Instance(&item)
@@ -834,7 +846,7 @@ func fetchInstanceWithMetaRows(rows *sql.Rows) (map[string]*model.Instance, erro
 }
 
 // getMoreInstancesMain 获取增量instances 主表内容，health_check内容
-func (ins *instanceStore) getMoreInstancesMain(mtime time.Time, firstUpdate bool, serviceID []string) (
+func (ins *instanceStore) getMoreInstancesMain(tx *BaseTx, mtime time.Time, firstUpdate bool, serviceID []string) (
 	map[string]*model.Instance, error) {
 	var index = 1
 	str := genInstanceSelectSQL() + fmt.Sprintf(" where instance.mtime >= $%d", index)
@@ -854,7 +866,7 @@ func (ins *instanceStore) getMoreInstancesMain(mtime time.Time, firstUpdate bool
 		args = append(args, id)
 	}
 
-	rows, err := ins.slave.Query(str, args...)
+	rows, err := tx.Query(str, args...)
 	if err != nil {
 		log.Errorf("[Store][database] get more instance query err: %s", err.Error())
 		return nil, err
@@ -978,7 +990,7 @@ func addMainInstance(tx *BaseTx, instance *model.Instance) error {
 		"version, health_status, isolate, weight, enable_health_check, logic_set, " +
 		"cmdb_region, cmdb_zone, cmdb_idc, priority, revision, ctime, mtime) " +
 		"values($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, " +
-		"$15, $16, $17, $18, $19)"
+		"$15, $16, $17, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
@@ -1001,7 +1013,7 @@ func addMainInstance(tx *BaseTx, instance *model.Instance) error {
 		instance.Protocol(), instance.Version(), healthy, isolate, instance.Weight(),
 		enableHealthCheck, instance.LogicSet(), instance.Location().GetRegion().GetValue(),
 		instance.Location().GetZone().GetValue(), instance.Location().GetCampus().GetValue(),
-		instance.Priority(), instance.Revision(), GetCurrentTimeFormat(), GetCurrentTimeFormat())
+		instance.Priority(), instance.Revision())
 	return err
 }
 
@@ -1019,10 +1031,9 @@ func batchAddMainInstances(tx *BaseTx, instances []*model.Instance) error {
 			str += ","
 		}
 		str += fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, "+
-			"$%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, '%v', '%v')",
+			"$%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)",
 			index, index+1, index+2, index+3, index+4, index+5, index+6, index+7, index+8,
-			index+9, index+10, index+11, index+12, index+13, index+14, index+15, index+16,
-			GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			index+9, index+10, index+11, index+12, index+13, index+14, index+15, index+16)
 		index += 17
 
 		first = false
@@ -1063,12 +1074,6 @@ func addInstanceCheck(tx *BaseTx, instance *model.Instance) error {
 	}
 
 	// 此语句暂时留存，ON CONFLICT误法仅支持postgreSQL-11以上的版本
-	/*str := `
-			INSERT INTO health_check (id, type, ttl)
-			VALUES ($1, $2, $3)
-			ON CONFLICT (id) DO
-			UPDATE
-	  		SET type = $4, ttl = $5`*/
 	str := "INSERT INTO health_check (id, type, ttl) VALUES ($1, $2, $3)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
@@ -1122,11 +1127,11 @@ func addInstanceMeta(tx *BaseTx, id string, meta map[string]string) error {
 	for key, value := range meta {
 		cnt++
 		if cnt == len(meta) {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v')", indexSort, indexSort+1,
-				indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)", indexSort, indexSort+1,
+				indexSort+2)
 		} else {
-			str += fmt.Sprintf("($%d, $%d, $%d, '%v', '%v'), ", indexSort, indexSort+1,
-				indexSort+2, GetCurrentTimeFormat(), GetCurrentTimeFormat())
+			str += fmt.Sprintf("($%d, $%d, $%d, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP), ", indexSort, indexSort+1,
+				indexSort+2)
 		}
 		indexSort += 3
 
@@ -1452,4 +1457,26 @@ func genExpandInstanceSelectSQL(needForceIndex bool) string {
 	}
 	str += "on service.id = instance.service_id) left join health_check on instance.id = health_check.id "
 	return str
+}
+
+// GetInstancesCountTx .
+func (ins *instanceStore) GetInstancesCountTx(tx store.Tx) (uint32, error) {
+	dbTx, _ := tx.GetDelegateTx().(*BaseTx)
+	countStr := "select count(*) from instance where flag = 0"
+	var count uint32
+	var err error
+	Retry("query-instance-row", func() error {
+		err = dbTx.QueryRow(countStr).Scan(&count)
+		return err
+	})
+	switch {
+	case err == sql.ErrNoRows:
+		return 0, nil
+	case err != nil:
+		log.Errorf("[Store][database] get instances count scan err: %s", err.Error())
+		return 0, err
+	default:
+	}
+
+	return count, nil
 }

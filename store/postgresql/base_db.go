@@ -21,11 +21,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/polarismesh/polaris/common/metrics"
+	"github.com/polarismesh/polaris/store"
 	"strings"
 	"time"
 
 	_ "github.com/lib/pq"
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/plugin"
 )
 
@@ -35,31 +36,31 @@ var errMsg = []string{"Deadlock", "bad connection", "invalid connection"}
 // BaseDB 对sql.DB的封装
 type BaseDB struct {
 	*sql.DB
-	cfg      *dbConfig
-	parsePwd plugin.ParsePassword
+	cfg            *dbConfig
+	isolationLevel sql.IsolationLevel
+	parsePwd       plugin.ParsePassword
 }
 
 // dbConfig store的配置
 type dbConfig struct {
-	dbType          string
-	dbUser          string
-	dbPwd           string
-	dbAddr          string
-	dbPort          string
-	dbName          string
-	maxOpenConns    int
-	maxIdleConns    int
-	connMaxLifetime int
+	dbType           string
+	dbUser           string
+	dbPwd            string
+	dbAddr           string
+	dbPort           string
+	dbName           string
+	maxOpenConns     int
+	maxIdleConns     int
+	connMaxLifetime  int
+	txIsolationLevel int
 }
 
 // NewBaseDB 新建一个BaseDB
 func NewBaseDB(cfg *dbConfig, parsePwd plugin.ParsePassword) (*BaseDB, error) {
 	baseDb := &BaseDB{cfg: cfg, parsePwd: parsePwd}
-
 	if err := baseDb.openDatabase(); err != nil {
 		return nil, err
 	}
-
 	return baseDb, nil
 }
 
@@ -136,13 +137,32 @@ func (b *BaseDB) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return rows, err
 }
 
+// QueryRow 重写db.Query函数
+func (b *BaseDB) QueryRow(query string, args ...interface{}) *sql.Row {
+	var (
+		row   *sql.Row
+		err   error
+		start = time.Now()
+	)
+	defer reportCallMetrics("QueryRow", start, err)
+
+	Retry("query "+query, func() error {
+		row = b.DB.QueryRow(query, args...)
+		err = row.Err()
+		return row.Err()
+	})
+
+	return row
+}
+
 // Begin 重写db.Begin
 func (b *BaseDB) Begin() (*BaseTx, error) {
-	var (
-		tx     *sql.Tx
-		err    error
-		option *sql.TxOptions
-	)
+	var tx *sql.Tx
+	var err error
+	var option *sql.TxOptions
+	var start = time.Now()
+
+	defer reportCallMetrics("Begin", start, err)
 
 	Retry("begin", func() error {
 		tx, err = b.DB.BeginTx(context.Background(), option)
@@ -152,9 +172,49 @@ func (b *BaseDB) Begin() (*BaseTx, error) {
 	return &BaseTx{Tx: tx}, err
 }
 
+func reportCallMetrics(label string, start time.Time, err error) {
+	plugin.GetStatis().ReportCallMetrics(metrics.CallMetric{
+		Type:     metrics.StoreCallMetric,
+		API:      label,
+		Protocol: "MySQL",
+		Code: func() int {
+			if err == nil {
+				return 0
+			}
+			return int(store.Code(store.Error(err)))
+		}(),
+		Times:            1,
+		Success:          err == nil,
+		Duration:         time.Since(start),
+		TrafficDirection: metrics.TrafficDirectionOutBound,
+	})
+}
+
 // BaseTx 对sql.Tx的封装
 type BaseTx struct {
 	*sql.Tx
+}
+
+// Commit .
+func (b *BaseTx) Commit() error {
+	var (
+		start = time.Now()
+		err   error
+	)
+	defer reportCallMetrics("Commit", start, err)
+	err = b.Tx.Commit()
+	return err
+}
+
+// Rollback .
+func (b *BaseTx) Rollback() error {
+	var (
+		start = time.Now()
+		err   error
+	)
+	defer reportCallMetrics("Rollback", start, err)
+	err = b.Tx.Rollback()
+	return err
 }
 
 // Retry 重试主函数

@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 )
@@ -44,13 +43,13 @@ const (
 const (
 	insertFaultDetectSql = "insert into fault_detect_rule(id, name, namespace, revision, description, " +
 		"dst_service, dst_namespace, dst_method, config, ctime, mtime) " +
-		"values($1,$2,$3,$4,$5,$6,$7,$8,$9, $10,$11)"
+		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,current_timestamp,current_timestamp)"
 
 	updateFaultDetectSql = "update fault_detect_rule set name = $1, namespace = $2, revision = $3, " +
 		"description = $4, dst_service = $5, dst_namespace = $6, dst_method = $7, " +
-		"config = $8, mtime = $9 where id = $10"
+		"config = $8, mtime = current_timestamp where id = $9"
 
-	deleteFaultDetectSql = "update fault_detect_rule set flag = 1, mtime = $1 where id = $2"
+	deleteFaultDetectSql = "update fault_detect_rule set flag = 1, mtime = current_timestamp where id = $1"
 
 	countFaultDetectSql = "select count(*) from fault_detect_rule where flag = 0"
 
@@ -80,7 +79,7 @@ func (f *faultDetectRuleStore) createFaultDetectRule(fdRule *model.FaultDetectRu
 		}
 		if _, err = stmt.Exec(fdRule.ID, fdRule.Name, fdRule.Namespace, fdRule.Revision,
 			fdRule.Description, fdRule.DstService, fdRule.DstNamespace, fdRule.DstMethod,
-			fdRule.Rule, GetCurrentTimeFormat(), GetCurrentTimeFormat()); err != nil {
+			fdRule.Rule); err != nil {
 			log.Errorf("[Store][database] fail to %s exec sql, rule(%+v), err: %s",
 				labelCreateFaultDetectRule, fdRule, err.Error())
 			return err
@@ -111,7 +110,7 @@ func (f *faultDetectRuleStore) updateFaultDetectRule(fdRule *model.FaultDetectRu
 		}
 		if _, err = stmt.Exec(fdRule.Name, fdRule.Namespace, fdRule.Revision, fdRule.Description,
 			fdRule.DstService, fdRule.DstNamespace, fdRule.DstMethod, fdRule.Rule,
-			GetCurrentTimeFormat(), fdRule.ID); err != nil {
+			fdRule.ID); err != nil {
 			log.Errorf("[Store][database] fail to %s exec sql, rule(%+v), err: %s",
 				labelUpdateFaultDetectRule, fdRule, err.Error())
 			return err
@@ -140,7 +139,7 @@ func (f *faultDetectRuleStore) deleteFaultDetectRule(id string) error {
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(GetCurrentTimeFormat(), id); err != nil {
+		if _, err = stmt.Exec(id); err != nil {
 			log.Errorf("[Store][database] fail to %s exec sql, rule(%s), err: %s",
 				labelDeleteFaultDetectRule, id, err.Error())
 			return err

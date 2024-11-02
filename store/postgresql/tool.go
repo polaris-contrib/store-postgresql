@@ -19,8 +19,6 @@ package postgresql
 
 import (
 	"time"
-
-	"github.com/polarismesh/polaris/common/log"
 )
 
 // toolStore 实现了ToolStoreStore

@@ -23,7 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
@@ -195,14 +194,11 @@ func (s *strategyStore) deleteStrategy(id string) error {
 
 	defer func() { _ = tx.Rollback() }()
 
-	stmt, err := tx.Prepare("UPDATE auth_strategy SET flag = 1, mtime = $1 WHERE id = $2")
+	stmt, err := tx.Prepare("UPDATE auth_strategy SET flag = 1, mtime = CURRENT_TIMESTAMP WHERE id = $1")
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec([]interface{}{
-		GetCurrentTimeFormat(),
-		id,
-	}...); err != nil {
+	if _, err = stmt.Exec([]interface{}{id}...); err != nil {
 		return err
 	}
 
@@ -210,16 +206,12 @@ func (s *strategyStore) deleteStrategy(id string) error {
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec([]interface{}{
-		id,
-	}...); err != nil {
+	if _, err = stmt.Exec([]interface{}{id}...); err != nil {
 		return err
 	}
 
 	stmt, err = tx.Prepare("DELETE FROM auth_principal WHERE strategy_id = $1")
-	if _, err = stmt.Exec([]interface{}{
-		id,
-	}...); err != nil {
+	if _, err = stmt.Exec([]interface{}{id}...); err != nil {
 		return err
 	}
 
@@ -369,12 +361,12 @@ func (s *strategyStore) LooseAddStrategyResources(resources []model.StrategyReso
 		}
 
 		// 主要是为了能够触发 StrategyCache 的刷新逻辑
-		updateStrategySql := "UPDATE auth_strategy SET mtime = $1 WHERE id = $2"
+		updateStrategySql := "UPDATE auth_strategy SET mtime = CURRENT_TIMESTAMP WHERE id = $1"
 		stmt, err = tx.Prepare(updateStrategySql)
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(GetCurrentTimeFormat(), resource.StrategyID); err != nil {
+		if _, err = stmt.Exec(resource.StrategyID); err != nil {
 			return err
 		}
 	}
@@ -412,12 +404,12 @@ func (s *strategyStore) RemoveStrategyResources(resources []model.StrategyResour
 			return err
 		}
 		// 主要是为了能够触发 StrategyCache 的刷新逻辑
-		updateStrategySql := "UPDATE auth_strategy SET mtime = $1 WHERE id = $2"
+		updateStrategySql := "UPDATE auth_strategy SET mtime = CURRENT_TIMESTAMP WHERE id = $1"
 		stmt, err = tx.Prepare(updateStrategySql)
 		if err != nil {
 			return err
 		}
-		if _, err = stmt.Exec(GetCurrentTimeFormat(), resource.StrategyID); err != nil {
+		if _, err = stmt.Exec(resource.StrategyID); err != nil {
 			return err
 		}
 	}

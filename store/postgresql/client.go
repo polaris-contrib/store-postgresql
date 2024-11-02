@@ -24,7 +24,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 	apiservice "github.com/polarismesh/specification/source/go/api/v1/service_manage"

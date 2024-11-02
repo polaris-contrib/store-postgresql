@@ -22,7 +22,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 )
 

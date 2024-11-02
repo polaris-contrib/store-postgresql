@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/plugin"
 	"github.com/polarismesh/polaris/store"
 )
@@ -30,20 +29,23 @@ const (
 	// SystemNamespace system namespace
 	SystemNamespace = "Polaris"
 	// STORENAME database storage name
-	STORENAME = "postgresqlStore"
+	STORENAME = "PostgresqlStore"
 	// DefaultConnMaxLifetime default maximum connection lifetime
 	DefaultConnMaxLifetime = 60 * 30 // 默认是30分钟
 	// emptyEnableTime 规则禁用时启用时间的默认值
 	emptyEnableTime = "1980-01-01 00:00:01"
 )
 
+func init() {
+	s := &PostgresqlStore{}
+	_ = store.RegisterStore(s)
+}
+
 // PostgresqlStore 实现了Store接口
 type PostgresqlStore struct {
 	*namespaceStore
-	// client info stores
-	*clientStore
 
-	// 服务注册发现、治理
+	// 服务治理中心
 	*serviceStore
 	*instanceStore
 	*routingConfigStore
@@ -51,33 +53,26 @@ type PostgresqlStore struct {
 	*rateLimitStore
 	*circuitBreakerStore
 	*faultDetectRuleStore
-
-	// 工具
-	*toolStore
-
-	// 鉴权模块相关
-	*userStore
-	*groupStore
-	*strategyStore
+	*routingConfigStoreV2
+	*serviceContractStore
 
 	// 配置中心store
 	*configFileGroupStore
 	*configFileStore
 	*configFileReleaseStore
 	*configFileReleaseHistoryStore
-	*configFileTagStore
 	*configFileTemplateStore
 
-	// v2 存储
-	*routingConfigStoreV2
-
-	// maintain store
+	*clientStore
 	*adminStore
+	*toolStore
+	*userStore
+	*groupStore
+	*strategyStore
+	*grayStore
 
 	// 主数据库，可以进行读写
 	master *BaseDB
-	// 对主数据库的事务操作，可读写
-	masterTx *BaseDB
 	// 备数据库，提供只读
 	slave *BaseDB
 	start bool
@@ -104,12 +99,6 @@ func (p *PostgresqlStore) Initialize(conf *store.Config) error {
 	}
 	p.master = master
 
-	masterTx, err := NewBaseDB(masterConfig, plugin.GetParsePassword())
-	if err != nil {
-		return err
-	}
-	p.masterTx = masterTx
-
 	if slaveConfig != nil {
 		log.Infof("[Store][database] use slave database config: %+v", slaveConfig)
 		slave, err := NewBaseDB(slaveConfig, plugin.GetParsePassword())
@@ -130,64 +119,6 @@ func (p *PostgresqlStore) Initialize(conf *store.Config) error {
 	p.newStore()
 
 	return nil
-}
-
-// Destroy 退出函数
-func (p *PostgresqlStore) Destroy() error {
-	p.start = false
-
-	if p.master != nil {
-		_ = p.master.Close()
-	}
-	if p.masterTx != nil {
-		_ = p.masterTx.Close()
-	}
-	if p.slave != nil {
-		_ = p.slave.Close()
-	}
-
-	if p.adminStore != nil {
-		p.adminStore.StopLeaderElections()
-	}
-
-	p.master = nil
-	p.masterTx = nil
-	p.slave = nil
-
-	return nil
-}
-
-// CreateTransaction 创建一个事务
-func (p *PostgresqlStore) CreateTransaction() (store.Transaction, error) {
-	// 每次创建事务前，还是需要ping一下
-	_ = p.masterTx.Ping()
-
-	nt := &transaction{}
-	tx, err := p.masterTx.Begin()
-	if err != nil {
-		log.Errorf("[Store][database] database begin err: %s", err.Error())
-		return nil, err
-	}
-
-	nt.tx = tx
-
-	return nt, nil
-}
-
-func (p *PostgresqlStore) StartTx() (store.Tx, error) {
-	tx, err := p.masterTx.Begin()
-	if err != nil {
-		return nil, err
-	}
-	return NewSqlDBTx(tx), nil
-}
-
-func buildEtimeStr(enable bool) string {
-	etimeStr := GetCurrentTimeFormat()
-	if !enable {
-		etimeStr = emptyEnableTime
-	}
-	return etimeStr
 }
 
 // parseDatabaseConf 解析数据库配置
@@ -252,55 +183,93 @@ func parseStoreConfig(opts interface{}) (*dbConfig, error) {
 	return c, nil
 }
 
+// Destroy 退出函数
+func (p *PostgresqlStore) Destroy() error {
+	p.start = false
+
+	if p.master != nil {
+		_ = p.master.Close()
+	}
+	if p.slave != nil {
+		_ = p.slave.Close()
+	}
+
+	if p.adminStore != nil {
+		p.adminStore.StopLeaderElections()
+	}
+
+	p.master = nil
+	p.slave = nil
+
+	return nil
+}
+
+// CreateTransaction 创建一个事务
+func (p *PostgresqlStore) CreateTransaction() (store.Transaction, error) {
+	// 每次创建事务前，还是需要ping一下
+	_ = p.master.Ping()
+
+	nt := &transaction{}
+	tx, err := p.master.Begin()
+	if err != nil {
+		log.Errorf("[Store][database] database begin err: %s", err.Error())
+		return nil, err
+	}
+
+	nt.tx = tx
+
+	return nt, nil
+}
+
+func (p *PostgresqlStore) StartTx() (store.Tx, error) {
+	tx, err := p.master.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return NewSqlDBTx(tx), nil
+}
+
+func (p *PostgresqlStore) StartReadTx() (store.Tx, error) {
+	tx, err := p.slave.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return NewSqlDBTx(tx), nil
+}
+
 // newStore 初始化子类
 func (p *PostgresqlStore) newStore() {
 	p.namespaceStore = &namespaceStore{master: p.master, slave: p.slave}
 
 	p.serviceStore = &serviceStore{master: p.master, slave: p.slave}
-
 	p.instanceStore = &instanceStore{master: p.master, slave: p.slave}
-
 	p.routingConfigStore = &routingConfigStore{master: p.master, slave: p.slave}
-
 	p.l5Store = &l5Store{master: p.master, slave: p.slave}
-
 	p.rateLimitStore = &rateLimitStore{master: p.master, slave: p.slave}
-
 	p.circuitBreakerStore = &circuitBreakerStore{master: p.master, slave: p.slave}
-
-	p.toolStore = &toolStore{db: p.master}
-
-	p.userStore = &userStore{master: p.master, slave: p.slave}
-
-	p.groupStore = &groupStore{master: p.master, slave: p.slave}
-
-	p.strategyStore = &strategyStore{master: p.master, slave: p.slave}
-
 	p.faultDetectRuleStore = &faultDetectRuleStore{master: p.master, slave: p.slave}
+	p.routingConfigStoreV2 = &routingConfigStoreV2{master: p.master, slave: p.slave}
+	p.serviceContractStore = &serviceContractStore{master: p.master, slave: p.slave}
 
 	p.configFileGroupStore = &configFileGroupStore{master: p.master, slave: p.slave}
-
 	p.configFileStore = &configFileStore{master: p.master, slave: p.slave}
-
-	p.configFileReleaseStore = &configFileReleaseStore{db: p.master, slave: p.slave}
-
-	p.configFileReleaseHistoryStore = &configFileReleaseHistoryStore{db: p.master}
-
-	p.configFileTagStore = &configFileTagStore{db: p.master}
-
-	p.configFileTemplateStore = &configFileTemplateStore{db: p.master}
-
+	p.configFileReleaseStore = &configFileReleaseStore{master: p.master, slave: p.slave}
+	p.configFileReleaseHistoryStore = &configFileReleaseHistoryStore{master: p.master}
+	p.configFileTemplateStore = &configFileTemplateStore{master: p.master}
 	p.clientStore = &clientStore{master: p.master, slave: p.slave}
 
-	p.routingConfigStoreV2 = &routingConfigStoreV2{master: p.master, slave: p.slave}
-
 	p.adminStore = newAdminStore(p.master)
+	p.toolStore = &toolStore{db: p.master}
+	p.userStore = &userStore{master: p.master, slave: p.slave}
+	p.groupStore = &groupStore{master: p.master, slave: p.slave}
+	p.strategyStore = &strategyStore{master: p.master, slave: p.slave}
+	p.grayStore = &grayStore{master: p.master, slave: p.slave}
 }
 
-func init() {
-	s := &PostgresqlStore{}
-	err := store.RegisterStore(s)
-	if err != nil {
-		log.Errorf("[Store][database] RegisterStore err: %+v", err)
+func buildEtimeStr(enable bool) string {
+	etimeStr := GetCurrentTimeFormat()
+	if !enable {
+		etimeStr = emptyEnableTime
 	}
+	return etimeStr
 }

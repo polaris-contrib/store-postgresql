@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/store"
 )
@@ -77,15 +76,14 @@ func (rls *rateLimitStore) createRateLimit(limit *model.RateLimit) error {
 	}
 	// 新建限流规则
 	str := "insert into ratelimit_config(id, name, disable, service_id, " +
-		"method, labels, priority, rule, revision, ctime, mtime, etime) " +
-		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)"
+		"method, labels, priority, rule, revision, current_timestamp, current_timestamp, etime) " +
+		"values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
 	if _, err = stmt.Exec(limit.ID, limit.Name, disable, limit.ServiceID, limit.Method,
-		limit.Labels, limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(),
-		GetCurrentTimeFormat(), etimeStr); err != nil {
+		limit.Labels, limit.Priority, limit.Rule, limit.Revision, etimeStr); err != nil {
 		log.Errorf("[Store][database] create rate limit(%+v), sql %s err: %s", limit, str, err.Error())
 		return err
 	}
@@ -142,13 +140,13 @@ func (rls *rateLimitStore) enableRateLimit(limit *model.RateLimit) error {
 		disable = 1
 	}
 
-	str := "update ratelimit_config set disable = $1, revision = $2, mtime = $3, " +
-		"etime = $4 where id = $5"
+	str := "update ratelimit_config set disable = $1, revision = $2, mtime = current_timestamp, " +
+		"etime = $3 where id = $4"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(disable, limit.Revision, GetCurrentTimeFormat(), etimeStr, limit.ID); err != nil {
+	if _, err = stmt.Exec(disable, limit.Revision, etimeStr, limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -180,13 +178,13 @@ func (rls *rateLimitStore) updateRateLimit(limit *model.RateLimit) error {
 	}
 	str := "update ratelimit_config set name = $1, service_id = $2, disable = $3, " +
 		"method = $4, labels = $5, priority = $6, rule = $7, revision = $8, " +
-		"mtime = $9, etime = $10 where id = $11"
+		"mtime = current_timestamp, etime = $9 where id = $10"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
 	if _, err = stmt.Exec(limit.Name, limit.ServiceID, disable, limit.Method, limit.Labels,
-		limit.Priority, limit.Rule, limit.Revision, GetCurrentTimeFormat(), etimeStr, limit.ID); err != nil {
+		limit.Priority, limit.Rule, limit.Revision, etimeStr, limit.ID); err != nil {
 		log.Errorf("[Store][database] update rate limit(%+v), sql %s, err: %s", limit, str, err)
 		return err
 	}
@@ -223,12 +221,12 @@ func (rls *rateLimitStore) deleteRateLimit(limit *model.RateLimit) error {
 		_ = tx.Rollback()
 	}()
 
-	str := "update ratelimit_config set flag = 1, mtime = $1 where id = $2"
+	str := "update ratelimit_config set flag = 1, mtime = current_timestamp where id = $1"
 	stmt, err := tx.Prepare(str)
 	if err != nil {
 		return err
 	}
-	if _, err = stmt.Exec(GetCurrentTimeFormat(), limit.ID); err != nil {
+	if _, err = stmt.Exec(limit.ID); err != nil {
 		log.Errorf("[Store][database] delete rate limit(%+v) err: %s", limit, err)
 		return err
 	}

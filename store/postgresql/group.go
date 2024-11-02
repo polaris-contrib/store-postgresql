@@ -20,9 +20,9 @@ package postgresql
 import (
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
@@ -84,7 +84,7 @@ func (u *groupStore) addGroup(group *model.UserGroupDetail) error {
 	}
 
 	addSql := "INSERT INTO user_group (id, name, owner, token, token_enable, comment, " +
-		"flag, ctime, mtime) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)"
+		"flag, ctime, mtime) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)"
 	stmt, err := tx.Prepare(addSql)
 	if err != nil {
 		return err
@@ -97,8 +97,6 @@ func (u *groupStore) addGroup(group *model.UserGroupDetail) error {
 		1,
 		group.Comment,
 		0,
-		GetCurrentTimeFormat(),
-		GetCurrentTimeFormat(),
 	}...); err != nil {
 		log.Errorf("[Store][Group] add usergroup err: %s", err.Error())
 		return err
@@ -163,8 +161,8 @@ func (u *groupStore) updateGroup(group *model.ModifyUserGroup) error {
 		}
 	}
 
-	modifySql := "UPDATE user_group SET token = $1, comment = $2, token_enable = $3, mtime = $4 " +
-		" WHERE id = $5 AND flag = 0"
+	modifySql := "UPDATE user_group SET token = $1, comment = $2, token_enable = $3, mtime = CURRENT_TIMESTAMP " +
+		" WHERE id = $4 AND flag = 0"
 	stmt, err := tx.Prepare(modifySql)
 	if err != nil {
 		return err
@@ -173,7 +171,6 @@ func (u *groupStore) updateGroup(group *model.ModifyUserGroup) error {
 		group.Token,
 		group.Comment,
 		tokenEnable,
-		GetCurrentTimeFormat(),
 		group.ID,
 	}...); err != nil {
 		log.Errorf("[Store][Group] update usergroup main err: %s", err.Error())
@@ -221,12 +218,11 @@ func (u *groupStore) deleteUserGroup(group *model.UserGroupDetail) error {
 		return err
 	}
 
-	stmt, err = tx.Prepare("UPDATE user_group SET flag = 1, mtime = $1 WHERE id = $2")
+	stmt, err = tx.Prepare("UPDATE user_group SET flag = 1, mtime = CURRENT_TIMESTAMP WHERE id = $1")
 	if err != nil {
 		return err
 	}
 	if _, err = stmt.Exec([]interface{}{
-		GetCurrentTimeFormat(),
 		group.ID,
 	}...); err != nil {
 		log.Errorf("[Store][Group] remove usergroup err: %s", err.Error())
@@ -252,8 +248,7 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 			"get usergroup missing some params, groupId is %s", groupId))
 	}
 
-	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
-		"ug.token_enable, ug.ctime, ug.mtime " +
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, ug.mtime " +
 		"FROM user_group ug WHERE ug.flag = 0 AND ug.id = $1"
 	row := u.master.QueryRow(getSql, groupId)
 
@@ -261,11 +256,12 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 		UserGroup: &model.UserGroup{},
 	}
 	var (
-		tokenEnable int
+		tokenEnable        int
+		ctimeStr, mtimeStr string
 	)
 
 	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
-		&tokenEnable, &group.CreateTime, &group.ModifyTime); err != nil {
+		&tokenEnable, &ctimeStr, &mtimeStr); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return nil, nil
@@ -277,6 +273,18 @@ func (u *groupStore) GetGroup(groupId string) (*model.UserGroupDetail, error) {
 	if err != nil {
 		return nil, store.Error(err)
 	}
+
+	// 将字符串转换为int64
+	ctimeFloat, err := strconv.ParseFloat(ctimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse create_time: %v", err)
+	}
+	mtimeFloat, err := strconv.ParseFloat(mtimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse modify_time: %v", err)
+	}
+	group.CreateTime = time.Unix(int64(ctimeFloat), 0)
+	group.ModifyTime = time.Unix(int64(mtimeFloat), 0)
 
 	group.UserIds = uids
 	group.TokenEnable = tokenEnable == 1
@@ -291,15 +299,17 @@ func (u *groupStore) GetGroupByName(name, owner string) (*model.UserGroup, error
 			"get usergroup missing some params, name=%s, owner=%s", name, owner))
 	}
 
-	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
-		"ug.ctime, ug.mtime FROM user_group ug " +
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.ctime, ug.mtime FROM user_group ug " +
 		"WHERE ug.flag = 0 AND ug.name = $1 AND ug.owner = $2"
 	row := u.master.QueryRow(getSql, name, owner)
 
 	group := new(model.UserGroup)
 
+	var (
+		ctimeStr, mtimeStr string
+	)
 	if err := row.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
-		&group.CreateTime, &group.ModifyTime); err != nil {
+		&ctimeStr, &mtimeStr); err != nil {
 		switch err {
 		case sql.ErrNoRows:
 			return nil, nil
@@ -307,6 +317,18 @@ func (u *groupStore) GetGroupByName(name, owner string) (*model.UserGroup, error
 			return nil, store.Error(err)
 		}
 	}
+
+	// 将字符串转换为int64
+	ctimeFloat, err := strconv.ParseFloat(ctimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse create_time: %v", err)
+	}
+	mtimeFloat, err := strconv.ParseFloat(mtimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse modify_time: %v", err)
+	}
+	group.CreateTime = time.Unix(int64(ctimeFloat), 0)
+	group.ModifyTime = time.Unix(int64(mtimeFloat), 0)
 
 	return group, nil
 }
@@ -337,8 +359,7 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 	filters = query
 
 	countSql := "SELECT COUNT(*) FROM user_group ug WHERE ug.flag = 0 "
-	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, " +
-		"ug.token_enable, ug.ctime, ug.mtime, ug.flag " +
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, ug.mtime, ug.flag " +
 		"FROM user_group ug WHERE ug.flag = 0"
 
 	args := make([]interface{}, 0)
@@ -383,10 +404,8 @@ func (u *groupStore) listSimpleGroups(filters map[string]string, offset uint32, 
 // listGroupByUser 查询某个用户下所关联的用户组信息
 func (u *groupStore) listGroupByUser(filters map[string]string, offset uint32, limit uint32) (uint32,
 	[]*model.UserGroup, error) {
-	countSql := "SELECT COUNT(*) FROM user_group_relation ul LEFT JOIN user_group ug ON " +
-		" ul.group_id = ug.id WHERE ug.flag = 0 "
-	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, " +
-		" ug.mtime, ug.flag " +
+	countSql := "SELECT COUNT(*) FROM user_group_relation ul LEFT JOIN user_group ug ON ul.group_id = ug.id WHERE ug.flag = 0 "
+	getSql := "SELECT ug.id, ug.name, ug.owner, ug.comment, ug.token, ug.token_enable, ug.ctime, ug.mtime, ug.flag " +
 		" FROM user_group_relation ul LEFT JOIN user_group ug ON ul.group_id = ug.id WHERE ug.flag = 0 "
 
 	args := make([]interface{}, 0)
@@ -466,8 +485,7 @@ func (u *groupStore) GetGroupsForCache(mtime time.Time, firstUpdate bool) ([]*mo
 	defer func() { _ = tx.Commit() }()
 
 	args := make([]interface{}, 0)
-	querySql := "SELECT id, name, owner, comment, token, token_enable, ctime, mtime, " +
-		" flag FROM user_group "
+	querySql := "SELECT id, name, owner, comment, token, token_enable, ctime, mtime, flag FROM user_group "
 	if !firstUpdate {
 		querySql += " WHERE mtime >= $1"
 		args = append(args, mtime)
@@ -582,12 +600,27 @@ func (u *groupStore) getGroupLinkUserIds(groupId string) (map[string]struct{}, e
 }
 
 func fetchRown2UserGroup(rows *sql.Rows) (*model.UserGroup, error) {
-	var flag, tokenEnable int
+	var (
+		flag, tokenEnable  int
+		ctimeStr, mtimeStr string
+	)
 	group := new(model.UserGroup)
 	if err := rows.Scan(&group.ID, &group.Name, &group.Owner, &group.Comment, &group.Token,
-		&tokenEnable, &group.CreateTime, &group.ModifyTime, &flag); err != nil {
+		&tokenEnable, &ctimeStr, &mtimeStr, &flag); err != nil {
 		return nil, err
 	}
+
+	// 将字符串转换为int64
+	ctimeFloat, err := strconv.ParseFloat(ctimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse create_time: %v", err)
+	}
+	mtimeFloat, err := strconv.ParseFloat(mtimeStr, 64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse modify_time: %v", err)
+	}
+	group.CreateTime = time.Unix(int64(ctimeFloat), 0)
+	group.ModifyTime = time.Unix(int64(mtimeFloat), 0)
 
 	group.Valid = flag == 0
 	group.TokenEnable = tokenEnable == 1

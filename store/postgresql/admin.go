@@ -21,13 +21,13 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	_ "github.com/lib/pq"
 	"github.com/polarismesh/polaris/common/eventhub"
-	"github.com/polarismesh/polaris/common/log"
 	"github.com/polarismesh/polaris/common/model"
 	"github.com/polarismesh/polaris/common/utils"
 	"github.com/polarismesh/polaris/store"
@@ -55,7 +55,6 @@ func newAdminStore(master *BaseDB) *adminStore {
 }
 
 type LeaderElectionStore interface {
-	// CreateLeaderElection
 	CreateLeaderElection(key string) error
 	// GetVersion get current version
 	GetVersion(key string) (int64, error)
@@ -77,14 +76,14 @@ func (l *leaderElectionStore) CreateLeaderElection(key string) error {
 	log.Debugf("[Store][database] create leader election (%s)", key)
 
 	return l.master.processWithTransaction("createLeaderElection", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("INSERT INTO leader_election(elect_key,leader) SELECT $1,$2 " +
-			"WHERE NOT EXISTS (SELECT 1 FROM leader_election WHERE elect_key=$3 AND leader=$4)")
+		mainStr := "INSERT INTO leader_election(elect_key,leader) VALUES ($1,$2)"
+		fmt.Println("sql", mainStr)
+		stmt, err := tx.Prepare(mainStr)
 		if err != nil {
 			return err
 		}
 
-		_, err = stmt.Exec(key, "", key, "")
-		if err != nil {
+		if _, err = stmt.Exec(key, ""); err != nil {
 			log.Errorf("[Store][database] create leader election (%s), err: %s", key, err.Error())
 		}
 
@@ -171,8 +170,11 @@ func (l *leaderElectionStore) CheckMtimeExpired(key string, leaseTime int32) (st
 
 func (l *leaderElectionStore) ListLeaderElections() ([]*model.LeaderElection, error) {
 	log.Info("[Store][database] list leader election")
+	mainStr := "SELECT elect_key, leader, " +
+		"CAST(EXTRACT(EPOCH FROM ctime) AS INTEGER) AS ctime, " +
+		"CAST(EXTRACT(EPOCH FROM mtime) AS INTEGER) AS mtime " +
+		"FROM leader_election"
 
-	mainStr := "select elect_key, leader, ctime, mtime from leader_election"
 	rows, err := l.master.Query(mainStr)
 	if err != nil {
 		log.Errorf("[Store][database] list leader election query err: %s", err.Error())
@@ -220,7 +222,6 @@ func checkLeaderValid(mtime int64) bool {
 	return delta <= LeaseTime
 }
 
-// leaderElectionStateMachine
 type leaderElectionStateMachine struct {
 	electKey         string
 	leStore          LeaderElectionStore
@@ -339,7 +340,6 @@ func (le *leaderElectionStateMachine) setReleaseTickLimit() {
 // changeToLeader 更新为leader
 func (le *leaderElectionStateMachine) changeToLeader() {
 	log.Infof("[Store][database] change from follower to leader (%s)", le.electKey)
-
 	atomic.StoreInt32(&le.leaderFlag, 1)
 	le.leader = utils.LocalHost
 	le.publishLeaderChangeEvent()
@@ -355,7 +355,7 @@ func (le *leaderElectionStateMachine) changeToFollower(leader string) {
 
 // publishLeaderChangeEvent 写入事件值
 func (le *leaderElectionStateMachine) publishLeaderChangeEvent() {
-	eventhub.Publish(eventhub.LeaderChangeEventTopic, store.LeaderChangeEvent{
+	_ = eventhub.Publish(eventhub.LeaderChangeEventTopic, store.LeaderChangeEvent{
 		Key:        le.electKey,
 		Leader:     le.isLeader(),
 		LeaderHost: le.leader,
@@ -480,16 +480,64 @@ func (m *adminStore) ReleaseLeaderElection(key string) error {
 func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize uint32) (uint32, error) {
 	log.Infof("[Store][database] batch clean soft deleted instances(%d)", batchSize)
 
-	var rows int64
+	var rowsAffected int64
 	err := m.master.processWithTransaction("batchCleanDeletedInstances", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("delete from instance where id in (select id from instance where " +
-			"flag = 1 and mtime <= $1 limit $2)")
+		// 查询出需要清理的实例 ID 信息
+		loadWaitDel := "SELECT id FROM instance WHERE flag = 1 AND " +
+			"mtime <= $1 limit $2"
+		diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
+		rows, err := tx.Query(loadWaitDel, UnixSecondToTime(diffTime), batchSize)
+		if err != nil {
+			log.Errorf("[Store][database] batch clean soft deleted instances(%d), err: %s", batchSize, err.Error())
+			return store.Error(err)
+		}
+		waitDelIds := make([]interface{}, 0, batchSize)
+		defer func() {
+			_ = rows.Close()
+		}()
+
+		placeholders := make([]string, 0, batchSize)
+		idx := 1
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				log.Errorf("[Store][database] scan deleted instances id, err: %s", err.Error())
+				return store.Error(err)
+			}
+			waitDelIds = append(waitDelIds, id)
+			placeholders = append(placeholders, fmt.Sprintf("$%d", idx))
+		}
+		if len(waitDelIds) == 0 {
+			return nil
+		}
+		inSql := strings.Join(placeholders, ",")
+
+		cleanMetaStr := fmt.Sprintf("DELETE FROM instance_metadata WHERE id IN (%s)", inSql)
+		stmt, err := tx.Prepare(cleanMetaStr)
 		if err != nil {
 			return store.Error(err)
 		}
+		if _, err := stmt.Exec(waitDelIds...); err != nil {
+			log.Errorf("[Store][database] batch clean soft deleted instances(%d), err: %s", batchSize, err.Error())
+			return store.Error(err)
+		}
 
-		diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
-		result, err := stmt.Exec(UnixSecondToTime(diffTime), batchSize)
+		cleanCheckStr := fmt.Sprintf("DELETE FROM health_check WHERE id IN (%s)", inSql)
+		stmtChk, err := tx.Prepare(cleanCheckStr)
+		if err != nil {
+			return store.Error(err)
+		}
+		if _, err := stmtChk.Exec(waitDelIds...); err != nil {
+			log.Errorf("[Store][database] batch clean soft deleted instances(%d), err: %s", batchSize, err.Error())
+			return store.Error(err)
+		}
+
+		cleanInsStr := fmt.Sprintf("DELETE FROM instance WHERE flag = 1 AND id IN (%s)", inSql)
+		stmtRet, err := tx.Prepare(cleanInsStr)
+		if err != nil {
+			return store.Error(err)
+		}
+		result, err := stmtRet.Exec(waitDelIds...)
 		if err != nil {
 			log.Errorf("[Store][database] batch clean soft deleted instances(%d), err: %s", batchSize, err.Error())
 			return store.Error(err)
@@ -508,22 +556,30 @@ func (m *adminStore) BatchCleanDeletedInstances(timeout time.Duration, batchSize
 			return err
 		}
 
-		rows = tRows
-
+		rowsAffected = tRows
 		return nil
 	})
 
-	return uint32(rows), err
+	return uint32(rowsAffected), err
 }
 
 // GetUnHealthyInstances 获取实例
 func (m *adminStore) GetUnHealthyInstances(timeout time.Duration, limit uint32) ([]string, error) {
 	log.Infof("[Store][database] get unhealthy instances which mtime timeout %s (%d)", timeout, limit)
 
-	diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
-	queryStr := "select id from instance where flag=0 and enable_health_check=1 and health_status=0 " +
-		"and mtime < $1 limit $2"
-	rows, err := m.master.Query(queryStr, UnixSecondToTime(diffTime), limit)
+	// PostgreSQL 查询语句
+	queryStr := `
+		SELECT id 
+		FROM instance 
+		WHERE flag = 0 
+		AND enable_health_check = 1 
+		AND health_status = 0 
+		AND mtime < TO_TIMESTAMP(EXTRACT(EPOCH FROM NOW()) - $1) 
+		LIMIT $2
+	`
+
+	// 执行 PostgreSQL 查询
+	rows, err := m.master.Query(queryStr, int32(timeout.Seconds()), limit)
 	if err != nil {
 		log.Errorf("[Store][database] get unhealthy instances, err: %s", err.Error())
 		return nil, store.Error(err)
@@ -551,22 +607,27 @@ func (m *adminStore) GetUnHealthyInstances(timeout time.Duration, limit uint32) 
 // BatchCleanDeletedClients 批量删除客户端
 func (m *adminStore) BatchCleanDeletedClients(timeout time.Duration, batchSize uint32) (uint32, error) {
 	log.Infof("[Store][database] batch clean soft deleted clients(%d)", batchSize)
-
 	var rows int64
 	err := m.master.processWithTransaction("batchCleanDeletedClients", func(tx *BaseTx) error {
-		stmt, err := tx.Prepare("delete from client where id in " +
-			"(select id from client where flag = 1 and mtime <= $1 limit $2)")
-		if err != nil {
-			return store.Error(err)
-		}
-
-		diffTime := GetCurrentSsTimestamp() - int64(timeout.Seconds())
-		result, err := stmt.Exec(UnixSecondToTime(diffTime), batchSize)
+		// PostgreSQL 语句，使用 EXTRACT 和 TO_TIMESTAMP 来替代 FROM_UNIXTIME 和 UNIX_TIMESTAMP
+		mainStr := `
+		WITH deleted_clients AS (
+			SELECT id 
+			FROM client 
+			WHERE flag = 1 
+			AND mtime <= TO_TIMESTAMP(EXTRACT(EPOCH FROM NOW()) - $1) 
+			LIMIT $2
+		)
+		DELETE FROM client WHERE id IN (SELECT id FROM deleted_clients);
+		`
+		// 执行 PostgreSQL 删除语句
+		result, err := tx.Exec(mainStr, int32(timeout.Seconds()), batchSize)
 		if err != nil {
 			log.Errorf("[Store][database] batch clean soft deleted clients(%d), err: %s", batchSize, err.Error())
 			return store.Error(err)
 		}
 
+		// 获取受影响的行数
 		tRows, err := result.RowsAffected()
 		if err != nil {
 			log.Warnf("[Store][database] batch clean soft deleted clients(%d), get RowsAffected err: %s",
@@ -574,6 +635,7 @@ func (m *adminStore) BatchCleanDeletedClients(timeout time.Duration, batchSize u
 			return store.Error(err)
 		}
 
+		// 提交事务
 		if err := tx.Commit(); err != nil {
 			log.Errorf("[Store][database] batch clean soft deleted clients(%d) commit tx err: %s",
 				batchSize, err.Error())
@@ -581,9 +643,7 @@ func (m *adminStore) BatchCleanDeletedClients(timeout time.Duration, batchSize u
 		}
 
 		rows = tRows
-
 		return nil
 	})
-
 	return uint32(rows), err
 }
