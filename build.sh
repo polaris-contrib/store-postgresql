@@ -44,7 +44,9 @@ go clean --modcache
 go get -u github.com/polaris-contrib/store-postgresql@${store_pg_plugin_version}
 go mod tidy
 
-make build VERSION=${polaris_server_tag}
+GOARCH=$(go env GOARCH)
+
+make build VERSION=${polaris_server_tag} ARCH=${GOARCH}
 
 release_file=$(ls -lstrh | grep ".zip" | awk '{print $10}' | grep -v "md5")
 
