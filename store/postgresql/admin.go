@@ -77,7 +77,6 @@ func (l *leaderElectionStore) CreateLeaderElection(key string) error {
 
 	return l.master.processWithTransaction("createLeaderElection", func(tx *BaseTx) error {
 		mainStr := "INSERT INTO leader_election(elect_key,leader) VALUES ($1,$2)"
-		fmt.Println("sql", mainStr)
 		stmt, err := tx.Prepare(mainStr)
 		if err != nil {
 			return err

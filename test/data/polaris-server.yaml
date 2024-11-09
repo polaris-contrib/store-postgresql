@@ -401,7 +401,7 @@ store:
   # option:
   #   path: ./polaris.bolt
   # ## 数据库存储插件
-  name: postgresql
+  name: PostgresqlStore
   option:
     master:
       dbType: "postgres"
