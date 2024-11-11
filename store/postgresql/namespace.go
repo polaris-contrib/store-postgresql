@@ -19,9 +19,11 @@ package postgresql
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/polarismesh/polaris/common/utils"
+	"strconv"
 	"time"
 
 	"github.com/polarismesh/polaris/common/model"
@@ -281,8 +283,10 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 	defer rows.Close()
 
 	var (
-		out  []*model.Namespace
-		flag int
+		out                []*model.Namespace
+		ctimeStr, mtimeStr string
+		flag               int
+		serviceExportTo    string
 	)
 
 	for rows.Next() {
@@ -293,12 +297,28 @@ func namespaceFetchRows(rows *sql.Rows) ([]*model.Namespace, error) {
 			&space.Token,
 			&space.Owner,
 			&flag,
-			&space.CreateTime,
-			&space.ModifyTime)
+			&ctimeStr,
+			&mtimeStr,
+			&serviceExportTo)
 		if err != nil {
 			log.Errorf("[Store][database] fetch namespace rows scan err: %s", err.Error())
 			return nil, err
 		}
+
+		// 将字符串转换为int64
+		ctimeFloat, err := strconv.ParseFloat(ctimeStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse create_time: %v", err)
+		}
+		mtimeFloat, err := strconv.ParseFloat(mtimeStr, 64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse modify_time: %v", err)
+		}
+		space.CreateTime = time.Unix(int64(ctimeFloat), 0)
+		space.ModifyTime = time.Unix(int64(mtimeFloat), 0)
+
+		space.ServiceExportTo = map[string]struct{}{}
+		_ = json.Unmarshal([]byte(serviceExportTo), &space.ServiceExportTo)
 
 		space.Valid = true
 		if flag == 1 {
