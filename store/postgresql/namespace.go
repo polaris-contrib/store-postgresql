@@ -268,11 +268,7 @@ func rlockNamespace(queryRow func(query string, args ...interface{}) *sql.Row, n
 // genNamespaceSelectSQL 生成namespace的查询语句
 func genNamespaceSelectSQL() string {
 	str := `
-	SELECT name, COALESCE(comment, '') AS comment, token,
-	       owner, flag, EXTRACT(EPOCH FROM ctime) AS ctime,
-	       EXTRACT(EPOCH FROM mtime) AS mtime,
-	       COALESCE(service_export_to, '{}'::json) AS service_export_to
-	FROM namespace
+	SELECT name, comment, token, owner, flag, ctime, mtime, service_export_to FROM namespace
 	`
 	return str
 }
